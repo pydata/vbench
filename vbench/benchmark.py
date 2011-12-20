@@ -6,7 +6,7 @@ import cProfile
 import pstats
 
 import gc
-import md5
+import hashlib
 import time
 import traceback
 
@@ -29,7 +29,7 @@ class Benchmark(object):
 
     @property
     def checksum(self):
-        return md5.md5(self.setup + self.code + self.cleanup).hexdigest()
+        return hashlib.md5(self.setup + self.code + self.cleanup).hexdigest()
 
     def profile(self, ncalls):
         prof = cProfile.Profile()
