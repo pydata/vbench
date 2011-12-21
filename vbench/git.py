@@ -33,7 +33,7 @@ class GitRepo(Repo):
         return self.timestamps.map(normalize_date)
 
     def _parse_commit_log(self):
-        githist = self.git + 'log --pretty=format:\"%h %ad %s\" > githist.txt'
+        githist = self.git + 'log --graph --pretty=format:\"::%h::%cd::%s\" > githist.txt'
         os.system(githist)
         githist = open('githist.txt').read()
         os.remove('githist.txt')
@@ -42,12 +42,20 @@ class GitRepo(Repo):
         timestamps = []
         messages = []
         for line in githist.split('\n'):
-            tokens = line.split()
+            # skip commits not in mainline
+            if not line[0] == '*':
+                continue
+            # split line into three real parts, ignoring git-graph in front
+            _,sha,stamp,message = line.split('::',3)
+            
+            # parse timestamp into datetime object
+            stamp = parser.parse(stamp)
+            # avoid duplicate timestamps by ignoring them
+            # presumably there is a better way to deal with this
+            if stamp in timestamps:
+                continue
 
-            stamp = parser.parse(' '.join(tokens[1:7]))
-            message = ' '.join(tokens[7:])
-
-            shas.append(tokens[0])
+            shas.append(sha)
             timestamps.append(stamp)
             messages.append(message)
 
