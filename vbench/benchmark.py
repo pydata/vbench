@@ -30,6 +30,9 @@ class Benchmark(object):
         exec self.setup in ns
         return ns
 
+    def _cleanup(self, ns):
+        exec self.cleanup in ns
+
     @property
     def checksum(self):
         return hashlib.md5(self.setup + self.code + self.cleanup).hexdigest()
@@ -43,6 +46,9 @@ class Benchmark(object):
             for i in xrange(ncalls):
                 exec code in ns
         prof.runcall(f)
+
+        self._cleanup(ns)
+
         return pstats.Stats(prof).sort_stats('cumulative')
 
     def get_results(self, db_path):
@@ -57,11 +63,13 @@ class Benchmark(object):
             result = magic_timeit(ns, self.code, ncalls=self.ncalls,
                                   force_ms=True)
             result['succeeded'] = True
-            return result
         except:
             buf = StringIO()
             traceback.print_exc(file=buf)
-            return {'succeeded' : False, 'traceback' : buf.getvalue()}
+            result = {'succeeded' : False, 'traceback' : buf.getvalue()}
+        
+        self._cleanup(ns)
+        return result
 
     def _run(self, ns, ncalls, disable_gc=False):
         if ncalls is None:
