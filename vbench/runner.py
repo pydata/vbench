@@ -7,6 +7,7 @@ from vbench.db import BenchmarkDB
 
 from datetime import datetime
 
+
 class BenchmarkRunner(object):
     """
 
@@ -16,9 +17,10 @@ class BenchmarkRunner(object):
     repo_path
     build_cmd
     db_path
-    run_option : {'eod', 'all', integer}
+    run_option : {'eod', 'all', 'last', integer}, default: 'eod'
         eod: use the last revision for each calendar day
         all: benchmark every revision
+        last: only try to run the last revision
         some integer N: run each N revisions
     overwrite : boolean
     dependencies : list or None
@@ -28,7 +30,7 @@ class BenchmarkRunner(object):
     def __init__(self, benchmarks, repo_path, repo_url,
                  build_cmd, db_path, tmp_dir,
                  preparation_cmd,
-                 run_option='end_of_day', start_date=None, overwrite=False,
+                 run_option='eod', start_date=None, overwrite=False,
                  module_dependencies=None,
                  always_clean=False,
                  use_blacklist=True):
@@ -195,6 +197,10 @@ class BenchmarkRunner(object):
             revs_to_run = grouped.apply(lambda x: x[-1]).values
         elif self.run_option == 'all':
             revs_to_run = rev_by_timestamp.values
+        elif self.run_option == 'last':
+            revs_to_run = rev_by_timestamp.values[-1:]
+            # TODO: if the very last revision fails, there should be a way
+            # to look for the second last, etc, until the last one that was run
         elif isinstance(self.run_option, int):
             revs_to_run = rev_by_timestamp.values[::self.run_option]
         else:

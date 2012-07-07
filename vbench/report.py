@@ -1,3 +1,2 @@
-
 class RSTReport(object):
     pass

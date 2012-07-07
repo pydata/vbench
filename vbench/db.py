@@ -3,9 +3,7 @@ from pandas import DataFrame
 from sqlalchemy import Table, Column, MetaData, create_engine, ForeignKey
 from sqlalchemy import types as sqltypes
 from sqlalchemy import sql
-from sqlalchemy import exceptions as exc
 
-from vbench.benchmark import Benchmark
 
 class BenchmarkDB(object):
     """
@@ -41,6 +39,7 @@ class BenchmarkDB(object):
         self._ensure_tables_created()
 
     _instances = {}
+
     @classmethod
     def get_instance(cls, dbpath):
         if dbpath not in cls._instances:
@@ -58,7 +57,7 @@ class BenchmarkDB(object):
         """
         table = self._benchmarks
         stmt = (table.update().
-                where(table.c.checksum==benchmark.checksum).
+                where(table.c.checksum == benchmark.checksum).
                 values(checksum=benchmark.checksum))
         self.conn.execute(stmt)
 
@@ -75,7 +74,7 @@ class BenchmarkDB(object):
         t = self._benchmarks
         for chksum in to_delete:
             print 'Deleting %s\n%s' % (chksum, ex_benchmarks.xs(chksum))
-            stmt = t.delete().where(t.c.checksum==chksum)
+            stmt = t.delete().where(t.c.checksum == chksum)
             self.conn.execute(stmt)
 
     @property
@@ -89,7 +88,7 @@ class BenchmarkDB(object):
         ins = self._benchmarks.insert()
         ins = ins.values(name=bm.name, checksum=bm.checksum,
                          description=bm.description)
-        result = self.conn.execute(ins)
+        self.conn.execute(ins)  # XXX: return the result?
 
     def delete_benchmark(self, checksum):
         """
@@ -105,8 +104,8 @@ class BenchmarkDB(object):
         ins = self._results.insert()
         ins = ins.values(checksum=checksum, revision=revision,
                          timestamp=timestamp,
-                         ncalls=ncalls, timing=timing,traceback=traceback)
-        result = self.conn.execute(ins)
+                         ncalls=ncalls, timing=timing, traceback=traceback)
+        self.conn.execute(ins)  # XXX: return the result?
 
     def delete_result(self, checksum, revision):
         """
@@ -171,6 +170,3 @@ def _sqa_to_frame(result):
     if not rows:
         return DataFrame(columns=result.keys())
     return DataFrame.from_records(rows, columns=result.keys())
-
-
-

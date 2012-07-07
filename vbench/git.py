@@ -1,21 +1,17 @@
 from dateutil import parser
 import subprocess
 import os
-import re
-import sys
-
-import pytz
 
 import numpy as np
 
 from pandas import *
 
-import vbench.config as config
 
 class Repo(object):
 
     def __init__(self):
         raise NotImplementedError
+
 
 class GitRepo(Repo):
     """
@@ -98,8 +94,8 @@ class GitRepo(Repo):
             insertions[cur] = i
             deletions[cur] = d
             prev = cur
-        return Panel({'insertions' : DataFrame(insertions),
-                      'deletions' : DataFrame(deletions)},
+        return Panel({'insertions': DataFrame(insertions),
+                      'deletions': DataFrame(deletions)},
                      minor_axis=hashes)
 
     def diff(self, sha, prev_sha):
@@ -116,7 +112,7 @@ class GitRepo(Repo):
                 i, d, path = line.split('\t')
                 insertions[path] = int(i)
                 deletions[path] = int(d)
-            except Exception: # EAFP
+            except Exception:  # EAFP
                 pass
 
         # statline = stdout.split('\n')[-2]
@@ -129,6 +125,7 @@ class GitRepo(Repo):
 
     def checkout(self, sha):
         pass
+
 
 class BenchRepo(object):
     """
@@ -248,8 +245,10 @@ def _convert_timezones(stamps):
 
     return [_convert(x) for x in stamps]
 
+
 def _git_command(repo_path):
     return ('git --git-dir=%s/.git --work-tree=%s ' % (repo_path, repo_path))
+
 
 def get_commit_history():
     # return TimeSeries
@@ -265,6 +264,7 @@ def get_commit_history():
 
     return Series(dates, shas), hists
 
+
 def get_commit_churn(sha, prev_sha):
     stdout = subprocess.Popen(['git', 'diff', sha, prev_sha, '--numstat'],
                               stdout=subprocess.PIPE).stdout
@@ -278,7 +278,7 @@ def get_commit_churn(sha, prev_sha):
             i, d, path = line.split('\t')
             insertions[path] = int(i)
             deletions[path] = int(d)
-        except: # EAFP
+        except:  # EAFP
             pass
 
     # statline = stdout.split('\n')[-2]
@@ -286,6 +286,7 @@ def get_commit_churn(sha, prev_sha):
     # insertions = int(match.group(1))
     # deletions = int(match.group(2))
     return insertions, deletions
+
 
 def get_code_churn(commits):
     shas = commits.index[::-1]
@@ -309,15 +310,14 @@ def get_code_churn(commits):
 
         prev = cur
 
-    return Panel({'insertions' : DataFrame(insertions),
-                  'deletions' : DataFrame(deletions)}, minor_axis=shas)
+    return Panel({'insertions': DataFrame(insertions),
+                  'deletions': DataFrame(deletions)}, minor_axis=shas)
 
 
     # return DataFrame({'insertions' : insertions,
     #                   'deletions' : deletions}, index=shas)
 
 if __name__ == '__main__':
-    repo_path = '/home/wesm/code/pandas'
+    repo_path = '/home/wesm/code/pandas'  # XXX:  specific?
     repo = GitRepo(repo_path)
     by_commit = 5
-
