@@ -25,6 +25,8 @@ class BenchmarkRunner(object):
     overwrite : boolean
     dependencies : list or None
         should be list of modules visible in cwd
+    time : boolean
+        whether to measure how much running the benchmarks takes
     """
 
     def __init__(self, benchmarks, repo_path, repo_url,
@@ -33,7 +35,8 @@ class BenchmarkRunner(object):
                  run_option='eod', start_date=None, overwrite=False,
                  module_dependencies=None,
                  always_clean=False,
-                 use_blacklist=True):
+                 use_blacklist=True,
+                 time=True):
 
         self.benchmarks = benchmarks
         self.checksums = [b.checksum for b in benchmarks]
@@ -50,7 +53,7 @@ class BenchmarkRunner(object):
         self.use_blacklist = use_blacklist
 
         self.blacklist = set(self.db.get_rev_blacklist())
-
+        self.time = time
         # where to copy the repo
         self.tmp_dir = tmp_dir
         self.bench_repo = BenchRepo(repo_url, self.tmp_dir, build_cmd,
@@ -58,6 +61,7 @@ class BenchmarkRunner(object):
                                     always_clean=always_clean,
                                     dependencies=module_dependencies)
         self._register_benchmarks()
+        self._python = os.environ.get('VBENCH_PYTHON', 'python')
 
     def run(self):
         revisions = self._get_revisions_to_run()
@@ -134,8 +138,10 @@ class BenchmarkRunner(object):
         pickle.dump(need_to_run, open(pickle_path, 'w'))
 
         # run the process
-        cmd = 'python vb_run_benchmarks.py %s %s' % (pickle_path, results_path)
-        print cmd
+        cmd = '%s vb_run_benchmarks.py %s %s' % (self._python, pickle_path,
+                                                 results_path)
+        if self.time:
+            cmd = 'time ' + cmd
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 shell=True,

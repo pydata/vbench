@@ -172,7 +172,7 @@ class BenchRepo(object):
             deps.extend(self.dependencies)
 
         for dep in deps:
-            cmd = 'cp %s %s' % (dep, self.target_dir)
+            cmd = 'cp -R %s %s' % (dep, self.target_dir)
             print cmd
             proc = subprocess.Popen(cmd, shell=True)
             proc.wait()

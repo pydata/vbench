@@ -1,4 +1,5 @@
 import sys
+import traceback
 import cPickle as pickle
 
 if len(sys.argv) != 3:
@@ -12,8 +13,10 @@ results = {}
 for bmk in benchmarks:
     try:
         res = bmk.run()
+        results[bmk.checksum] = res
     except Exception:
+        print >> sys.stderr, 'Exception in benchmark %s:' % bmk.name
+        traceback.print_exc()
         continue
-    results[bmk.checksum] = res
 
 benchmarks = pickle.dump(results, open(out_path, 'w'))
