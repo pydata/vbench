@@ -29,6 +29,7 @@ class BenchmarkDB(object):
             Column('timestamp', sqltypes.DateTime, nullable=False),
             Column('ncalls', sqltypes.String(50)),
             Column('timing', sqltypes.Float),
+            Column('memory', sqltypes.Float),
             Column('traceback', sqltypes.Text),
         )
 
@@ -97,14 +98,15 @@ class BenchmarkDB(object):
         pass
 
     def write_result(self, checksum, revision, timestamp, ncalls,
-                     timing, traceback=None, overwrite=False):
+                     timing, memory, traceback=None, overwrite=False):
         """
 
         """
         ins = self._results.insert()
         ins = ins.values(checksum=checksum, revision=revision,
                          timestamp=timestamp,
-                         ncalls=ncalls, timing=timing, traceback=traceback)
+                         ncalls=ncalls, timing=timing, memory=memory,
+                         traceback=traceback)
         self.conn.execute(ins)  # XXX: return the result?
 
     def delete_result(self, checksum, revision):
@@ -157,7 +159,7 @@ class BenchmarkDB(object):
         """
         tab = self._results
         stmt = sql.select([tab.c.timestamp, tab.c.revision, tab.c.ncalls,
-                           tab.c.timing, tab.c.traceback],
+                           tab.c.timing, tab.c.memory, tab.c.traceback],
                           sql.and_(tab.c.checksum == checksum))
         results = self.conn.execute(stmt)
 

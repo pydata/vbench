@@ -18,7 +18,7 @@ class Benchmark(object):
 
     def __init__(self, code, setup, ncalls=None, repeat=3, cleanup=None,
                  name=None, description=None, start_date=None,
-                 logy=False):
+                 logy=False, memory=False):
         self.code = code
         self.setup = setup
         self.cleanup = cleanup or ''
@@ -36,6 +36,7 @@ class Benchmark(object):
         self.description = description
         self.start_date = start_date
         self.logy = logy
+        self.memory = memory
 
     def __repr__(self):
         return "Benchmark('%s')" % self.name
@@ -84,6 +85,16 @@ class Benchmark(object):
             traceback.print_exc(file=buf)
             result = {'succeeded': False, 'traceback': buf.getvalue()}
 
+        if self.memory:
+            try:
+                mem_usage = magic_memit(ns, self.code, repeat=self.repeat)
+                result['memory'] = mem_usage
+                result['mem_succeeded'] = True
+            except:
+                result['mem_succeeded'] = False
+                traceback.print_exc(file=buf)
+                result['traceback'] += buf
+
         self._cleanup(ns)
         return result
 
@@ -104,8 +115,17 @@ class Benchmark(object):
 
         return elapsed
 
-    def to_rst(self, image_path=None):
-        output = """**Benchmark setup**
+    def to_rst(self, image_paths=None):
+        """Generates rst file with a list of images
+
+        image_paths: list of tuples (title, rel_path)
+        """
+
+        if not image_paths:
+            image_paths = []
+
+        output = """\
+**Benchmark setup**
 
 .. code-block:: python
 
@@ -119,13 +139,14 @@ class Benchmark(object):
 
 """ % (indent(self.setup), indent(self.code))
 
-        if image_path is not None:
-            output += ("**Performance graph**\n\n.. image:: %s"
-                       "\n   :width: 6in" % image_path)
+        for title, path in image_paths:
+            output += ("**%s**\n\n.. image:: %s"
+                       "\n   :width: 6in\n\n" % (title, path))
 
         return output
 
-    def plot(self, db_path, label='time', ax=None, title=True):
+    def plot(self, db_path, label='time', ax=None, title=True, y='timing',
+             ylabel='miliseconds'):
         import matplotlib.pyplot as plt
         from matplotlib.dates import MonthLocator, DateFormatter
 
@@ -135,13 +156,13 @@ class Benchmark(object):
             fig = plt.figure()
             ax = fig.add_subplot(111)
 
-        timing = results['timing']
+        timing = results[y]
         if self.start_date is not None:
             timing = timing.truncate(before=self.start_date)
 
         timing.plot(ax=ax, style='b-', label=label)
         ax.set_xlabel('Date')
-        ax.set_ylabel('milliseconds')
+        ax.set_ylabel(ylabel)
 
         if self.logy:
             ax2 = ax.twinx()
@@ -149,7 +170,7 @@ class Benchmark(object):
                 timing.plot(ax=ax2, label='%s (log scale)' % label,
                             style='r-',
                             logy=self.logy)
-                ax2.set_ylabel('milliseconds (log scale)')
+                ax2.set_ylabel(ylabel + ' (log scale)')
                 ax.legend(loc='best')
                 ax2.legend(loc='best')
             except ValueError:
@@ -377,6 +398,108 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
             'repeat': repeat,
             'timing': best * scaling[order],
             'units': units[order]}
+
+
+# Adapted from memory_profiler
+def magic_memit(ns, line='', repeat=1, timeout=None, run_in_place=False):
+    """Measure memory usage of a Python statement
+
+    Usage, in line mode:
+      %memit [-ir<R>t<T>] statement
+
+    Options:
+    -r<R>: repeat the loop iteration <R> times and take the best result.
+    Default: 3
+
+    -i: run the code in the current environment, without forking a new process.
+    This is required on some MacOS versions of Accelerate if your line contains
+    a call to `np.dot`.
+
+    -t<T>: timeout after <T> seconds. Unused if `-i` is active. Default: None
+
+    Examples
+    --------
+    ::
+
+      In [1]: import numpy as np
+
+      In [2]: %memit np.zeros(1e7)
+      maximum of 3: 76.402344 MB per loop
+
+      In [3]: %memit np.ones(1e6)
+      maximum of 3: 7.820312 MB per loop
+
+      In [4]: %memit -r 10 np.empty(1e8)
+      maximum of 10: 0.101562 MB per loop
+
+      In [5]: memit -t 3 while True: pass;
+      Subprocess timed out.
+      Subprocess timed out.
+      Subprocess timed out.
+      ERROR: all subprocesses exited unsuccessfully. Try again with the `-i`
+      option.
+      maximum of 3: -inf MB per loop
+
+    """
+    if repeat < 1:
+        repeat == 1
+    if timeout <= 0:
+        timeout = None
+
+    # Don't depend on multiprocessing:
+    try:
+        import multiprocessing as pr
+        from multiprocessing.queues import SimpleQueue
+        q = SimpleQueue()
+    except ImportError:
+        class ListWithPut(list):
+            "Just a list where the `append` method is aliased to `put`."
+            def put(self, x):
+                self.append(x)
+        q = ListWithPut()
+        print ('WARNING: cannot import module `multiprocessing`. Forcing the'
+               '`-i` option.')
+        run_in_place = True
+
+    def _get_usage(q, stmt, setup='pass', ns={}):
+        from memory_profiler import memory_usage as _mu
+        try:
+            exec setup in ns
+            _mu0 = _mu()[0]
+            exec stmt in ns
+            _mu1 = _mu()[0]
+            q.put(_mu1 - _mu0)
+        except Exception as e:
+            q.put(float('-inf'))
+            raise e
+
+    if run_in_place:
+        for _ in xrange(repeat):
+            _get_usage(q, line, ns=ns)
+    else:
+        # run in consecutive subprocesses
+        at_least_one_worked = False
+        for _ in xrange(repeat):
+            p = pr.Process(target=_get_usage, args=(q, line, 'pass', ns))
+            p.start()
+            p.join(timeout=timeout)
+            if p.exitcode == 0:
+                at_least_one_worked = True
+            else:
+                p.terminate()
+                if p.exitcode == None:
+                    print 'Subprocess timed out.'
+                else:
+                    print 'Subprocess exited with code %d.' % p.exitcode
+                q.put(float('-inf'))
+
+        if not at_least_one_worked:
+            raise RuntimeError('ERROR: all subprocesses exited unsuccessfully.'
+                               ' Try again with the `-i` option.')
+
+    usages = [q.get() for _ in xrange(repeat)]
+    usage = max(usages)
+    return usage
 
 
 def gather_benchmarks(ns):
