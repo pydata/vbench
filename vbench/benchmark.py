@@ -3,7 +3,13 @@
 from cStringIO import StringIO
 
 import cProfile
-import pstats
+try:
+    import pstats
+except ImportError:
+    # pstats.py was not available in python 2.6.6 distributed on Debian squeeze
+    # systems and was included only starting from 2.6.7-2.  That is why import
+    # from a local copy
+    import _pstats as pstats
 
 import gc
 import hashlib
@@ -73,18 +79,24 @@ class Benchmark(object):
         return db.get_benchmark_results(self.checksum)
 
     def run(self):
-        ns = self._setup()
-
+        ns = None
         try:
+            stage = 'setup'
+            ns = self._setup()
+
+            stage = 'benchmark'
             result = magic_timeit(ns, self.code, ncalls=self.ncalls,
                                   repeat=self.repeat, force_ms=True)
             result['succeeded'] = True
         except:
             buf = StringIO()
             traceback.print_exc(file=buf)
-            result = {'succeeded': False, 'traceback': buf.getvalue()}
+            result = {'succeeded': False,
+                      'stage': stage,
+                      'traceback': buf.getvalue()}
 
-        self._cleanup(ns)
+        if ns:
+            self._cleanup(ns)
         return result
 
     def _run(self, ns, ncalls, disable_gc=False):
