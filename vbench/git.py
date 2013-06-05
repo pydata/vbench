@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 
-from pandas import *
+from pandas import Series, DataFrame, Panel
 
 
 class Repo(object):
