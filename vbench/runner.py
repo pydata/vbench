@@ -4,9 +4,15 @@ import subprocess
 
 from vbench.git import GitRepo, BenchRepo
 from vbench.db import BenchmarkDB
+from vbench.utils import multires_order
 
 from datetime import datetime
 
+_RUN_ORDERS = dict(
+    normal=lambda x:x,
+    reverse=lambda x:x[::-1],
+    multires=multires_order,
+    )
 
 class BenchmarkRunner(object):
     """
@@ -22,6 +28,11 @@ class BenchmarkRunner(object):
         all: benchmark every revision
         last: only try to run the last revision
         some integer N: run each N revisions
+    run_order :
+        normal : original order (default)
+        reverse: in reverse order (latest first)
+        multires: cover all revisions but in the order increasing
+                  temporal detail
     overwrite : boolean
     dependencies : list or None
         should be list of modules visible in cwd
@@ -30,7 +41,8 @@ class BenchmarkRunner(object):
     def __init__(self, benchmarks, repo_path, repo_url,
                  build_cmd, db_path, tmp_dir,
                  preparation_cmd,
-                 run_option='eod', start_date=None, overwrite=False,
+                 run_option='eod', run_order='normal',
+                 start_date=None, overwrite=False,
                  module_dependencies=None,
                  always_clean=False,
                  use_blacklist=True):
@@ -40,6 +52,7 @@ class BenchmarkRunner(object):
 
         self.start_date = start_date
         self.run_option = run_option
+        self.run_order = run_order
 
         self.repo_path = repo_path
         self.db_path = db_path
@@ -60,8 +73,10 @@ class BenchmarkRunner(object):
         self._register_benchmarks()
 
     def run(self):
+        print "Collecting revisions to run"
         revisions = self._get_revisions_to_run()
 
+        print "Running benchmarks for %d revisions" % (len(revisions),)
         for rev in revisions:
             if self.use_blacklist and rev in self.blacklist:
                 print 'SKIPPING BLACKLISTED %s' % rev
@@ -204,6 +219,11 @@ class BenchmarkRunner(object):
         elif isinstance(self.run_option, int):
             revs_to_run = rev_by_timestamp.values[::self.run_option]
         else:
-            raise Exception('unrecognized run_option %s' % self.run_option)
+            raise ValueError('unrecognized run_option=%r' % self.run_option)
+
+        if not self.run_order in _RUN_ORDERS:
+            raise ValueError('unrecognized run_order=%r. Must be among %s'
+                             % (self.run_order, _RUN_ORDERS.keys()))
+        revs_to_run = _RUN_ORDERS[self.run_order](revs_to_run)
 
         return revs_to_run
