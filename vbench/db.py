@@ -4,6 +4,8 @@ from sqlalchemy import Table, Column, MetaData, create_engine, ForeignKey
 from sqlalchemy import types as sqltypes
 from sqlalchemy import sql
 
+import logging
+log = logging.getLogger('vb.db')
 
 class BenchmarkDB(object):
     """
@@ -11,6 +13,7 @@ class BenchmarkDB(object):
     """
 
     def __init__(self, dbpath):
+        log.info("Initializing DB at %s" % dbpath)
         self.dbpath = dbpath
 
         self._engine = create_engine('sqlite:///%s' % dbpath)
@@ -47,6 +50,7 @@ class BenchmarkDB(object):
         return cls._instances[dbpath]
 
     def _ensure_tables_created(self):
+        log.debug("Ensuring DB tables are created")
         self._benchmarks.create(self._engine, checkfirst=True)
         self._results.create(self._engine, checkfirst=True)
         self._blacklist.create(self._engine, checkfirst=True)
@@ -73,7 +77,7 @@ class BenchmarkDB(object):
 
         t = self._benchmarks
         for chksum in to_delete:
-            print 'Deleting %s\n%s' % (chksum, ex_benchmarks.xs(chksum))
+            log.info('Deleting %s\n%s' % (chksum, ex_benchmarks.xs(chksum)))
             stmt = t.delete().where(t.c.checksum == chksum)
             self.conn.execute(stmt)
 

@@ -1,10 +1,15 @@
 from dateutil import parser
 import subprocess
 import os
+import shutil
 
 import numpy as np
 
 from pandas import Series, DataFrame, Panel
+from vbench.utils import run_cmd
+
+import logging
+log = logging.getLogger('vb.git')
 
 
 class Repo(object):
@@ -19,6 +24,7 @@ class GitRepo(Repo):
     """
 
     def __init__(self, repo_path):
+        log.info("Initializing GitRepo to look at %s" % repo_path)
         self.repo_path = repo_path
         self.git = _git_command(self.repo_path)
         (self.shas, self.messages,
@@ -30,6 +36,7 @@ class GitRepo(Repo):
         return self.timestamps.map(normalize_date)
 
     def _parse_commit_log(self):
+        log.debug("Parsing the commit log of %s" % self.repo_path)
         githist = self.git + ('log --graph --pretty=format:'
                               '\"::%h::%cd::%s::%an\" > githist.txt')
         os.system(githist)
@@ -126,44 +133,49 @@ class GitRepo(Repo):
     def checkout(self, sha):
         pass
 
-
 class BenchRepo(object):
     """
     Manage an isolated copy of a repository for benchmarking
     """
     def __init__(self, source_url, target_dir, build_cmds, prep_cmd,
-                 dependencies=None, always_clean=False):
+                 clean_cmd=None, dependencies=None, always_clean=False):
         self.source_url = source_url
         self.target_dir = target_dir
         self.target_dir_tmp = target_dir + '_tmp'
         self.build_cmds = build_cmds
         self.prep_cmd = prep_cmd
+        self.clean_cmd = clean_cmd
         self.dependencies = dependencies
         self.always_clean = always_clean
         self._clean_checkout()
         self._copy_repo()
 
     def _clean_checkout(self):
-        self._clone(self.source_url, self.target_dir_tmp)
+        log.debug("Clean checkout of %s from %s"
+                  % (self.source_url, self.target_dir_tmp))
+        self._clone(self.source_url, self.target_dir_tmp, rm=True)
 
     def _copy_repo(self):
-        if os.path.exists(self.target_dir):
-            print 'Deleting %s first' % self.target_dir
-            # response = raw_input('%s exists, delete? y/n' % self.target_dir)
-            # if response == 'n':
-            #     raise Exception('foo')
-            cmd = 'rm -rf %s' % self.target_dir
-            print cmd
-            os.system(cmd)
-
-        self._clone(self.target_dir_tmp, self.target_dir)
+        log.debug("Repopulating %s" % self.target_dir)
+        self._clone(self.target_dir_tmp, self.target_dir, rm=True)
         self._prep()
         self._copy_benchmark_scripts_and_deps()
 
-    def _clone(self, source, target):
-        cmd = 'git clone %s %s' % (source, target)
-        print cmd
-        os.system(cmd)
+    def _clone(self, source, target, rm=False):
+        log.info("Cloning %s over to %s" % (source, target))
+        if os.path.exists(target):
+            if rm:
+                log.info('Deleting %s first' % target)
+                # response = raw_input('%s exists, delete? y/n' % self.target_dir)
+                # if response == 'n':
+                #     raise Exception('foo')
+                # yoh: no need to divert from Python
+                #run_cmd('rm -rf %s' % self.target_dir)
+                shutil.rmtree(target)
+            else:
+                raise RuntimeError("Target directory %s already exists. "
+                                   "Can't clone into it" % target)
+        run_cmd(['git', 'clone', source, target])
 
     def _copy_benchmark_scripts_and_deps(self):
         pth, _ = os.path.split(os.path.abspath(__file__))
@@ -172,10 +184,7 @@ class BenchRepo(object):
             deps.extend(self.dependencies)
 
         for dep in deps:
-            cmd = 'cp %s %s' % (dep, self.target_dir)
-            print cmd
-            proc = subprocess.Popen(cmd, shell=True)
-            proc.wait()
+            proc = run_cmd('cp %s %s' % (dep, self.target_dir), shell=True)
 
     def switch_to_revision(self, rev):
         """
@@ -183,6 +192,8 @@ class BenchRepo(object):
         """
         if self.always_clean:
             self.hard_clean()
+        else:
+            self._clean()
         self._checkout(rev)
         self._clean_pyc_files()
         self._build()
@@ -191,32 +202,25 @@ class BenchRepo(object):
         git = _git_command(self.target_dir)
         rest = 'checkout -f %s' % rev
         args = git.split() + rest.split()
-
-        print ' '.join(args)
-
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
-        proc.wait()
-        print proc.stdout.read()
+        # checkout of a detached commit would always produce stderr
+        proc = run_cmd(args, stderr_levels=('debug', 'error'))
 
     def _build(self):
         cmd = ';'.join([x for x in self.build_cmds.split('\n')
                         if len(x.strip()) > 0])
-
-        print cmd
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True,
-                                cwd=self.target_dir)
-        stdout, stderr = proc.communicate()
-        print stdout
+        proc = run_cmd(cmd, shell=True, cwd=self.target_dir)
 
     def _prep(self):
         cmd = ';'.join([x for x in self.prep_cmd.split('\n')
                         if len(x.strip()) > 0])
+        proc = run_cmd(cmd, shell=True, cwd=self.target_dir)
 
-        print cmd
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True,
-                                cwd=self.target_dir)
-        stdout, stderr = proc.communicate()
-        print stdout
+    def _clean(self):
+        if not self.clean_cmd:
+            return
+        cmd = ';'.join([x for x in self.clean_cmd.split('\n')
+                        if len(x.strip()) > 0])
+        proc = run_cmd(cmd, shell=True, cwd=self.target_dir)
 
     def hard_clean(self):
         self._copy_repo()
@@ -266,6 +270,7 @@ def get_commit_history():
 
 
 def get_commit_churn(sha, prev_sha):
+    # TODO: handle stderr
     stdout = subprocess.Popen(['git', 'diff', sha, prev_sha, '--numstat'],
                               stdout=subprocess.PIPE).stdout
     stdout = stdout.read()

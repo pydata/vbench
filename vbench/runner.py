@@ -4,9 +4,18 @@ import subprocess
 
 from vbench.git import GitRepo, BenchRepo
 from vbench.db import BenchmarkDB
+from vbench.utils import multires_order
 
 from datetime import datetime
 
+import logging
+log = logging.getLogger('vb.runner')
+
+_RUN_ORDERS = dict(
+    normal=lambda x:x,
+    reverse=lambda x:x[::-1],
+    multires=multires_order,
+    )
 
 class BenchmarkRunner(object):
     """
@@ -22,6 +31,11 @@ class BenchmarkRunner(object):
         all: benchmark every revision
         last: only try to run the last revision
         some integer N: run each N revisions
+    run_order :
+        normal : original order (default)
+        reverse: in reverse order (latest first)
+        multires: cover all revisions but in the order increasing
+                  temporal detail
     overwrite : boolean
     dependencies : list or None
         should be list of modules visible in cwd
@@ -29,17 +43,20 @@ class BenchmarkRunner(object):
 
     def __init__(self, benchmarks, repo_path, repo_url,
                  build_cmd, db_path, tmp_dir,
-                 preparation_cmd,
-                 run_option='eod', start_date=None, overwrite=False,
+                 prep_cmd,
+                 clean_cmd,
+                 run_option='eod', run_order='normal',
+                 start_date=None, overwrite=False,
                  module_dependencies=None,
                  always_clean=False,
                  use_blacklist=True):
-
+        log.info("Initializing benchmark runner for %d benchmarks" % (len(benchmarks)))
         self.benchmarks = benchmarks
         self.checksums = [b.checksum for b in benchmarks]
 
         self.start_date = start_date
         self.run_option = run_option
+        self.run_order = run_order
 
         self.repo_path = repo_path
         self.db_path = db_path
@@ -54,17 +71,20 @@ class BenchmarkRunner(object):
         # where to copy the repo
         self.tmp_dir = tmp_dir
         self.bench_repo = BenchRepo(repo_url, self.tmp_dir, build_cmd,
-                                    preparation_cmd,
+                                    prep_cmd,
+                                    clean_cmd,
                                     always_clean=always_clean,
                                     dependencies=module_dependencies)
         self._register_benchmarks()
 
     def run(self):
+        log.info("Collecting revisions to run")
         revisions = self._get_revisions_to_run()
 
+        log.info("Running benchmarks for %d revisions" % (len(revisions),))
         for rev in revisions:
             if self.use_blacklist and rev in self.blacklist:
-                print 'SKIPPING BLACKLISTED %s' % rev
+                log.warn('Skipping blacklisted %s' % rev)
                 continue
 
             any_succeeded, n_active = self._run_and_write_results(rev)
@@ -77,7 +97,7 @@ class BenchmarkRunner(object):
                 # wasting our time
                 if (not any_succeeded2 and n_active > 5
                     and self.use_blacklist):
-                    print 'BLACKLISTING %s' % rev
+                    log.warn('Blacklisting %s' % rev)
                     self.db.add_rev_blacklist(rev)
 
     def _run_and_write_results(self, rev):
@@ -105,25 +125,27 @@ class BenchmarkRunner(object):
         return any_succeeded, n_active_benchmarks
 
     def _register_benchmarks(self):
+        log.info('Getting benchmarks')
         ex_benchmarks = self.db.get_benchmarks()
         db_checksums = set(ex_benchmarks.index)
+        log.info("Registering %d benchmarks" % len(ex_benchmarks))
         for bm in self.benchmarks:
             if bm.checksum in db_checksums:
                 self.db.update_name(bm)
             else:
-                print 'Writing new benchmark %s, %s' % (bm.name, bm.checksum)
+                log.info('Writing new benchmark %s, %s' % (bm.name, bm.checksum))
                 self.db.write_benchmark(bm)
 
     def _run_revision(self, rev):
         need_to_run = self._get_benchmarks_for_rev(rev)
 
         if not need_to_run:
-            print 'No benchmarks need running at %s' % rev
+            log.info('No benchmarks need running at %s' % rev)
             return 0, {}
 
-        print 'Running %d benchmarks for revision %s' % (len(need_to_run), rev)
+        log.info('Running %d benchmarks for revision %s' % (len(need_to_run), rev))
         for bm in need_to_run:
-            print bm.name
+            log.debug(bm.name)
 
         self.bench_repo.switch_to_revision(rev)
 
@@ -135,25 +157,24 @@ class BenchmarkRunner(object):
 
         # run the process
         cmd = 'python vb_run_benchmarks.py %s %s' % (pickle_path, results_path)
-        print cmd
+        log.debug("CMD: %s" % cmd)
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 shell=True,
                                 cwd=self.tmp_dir)
         stdout, stderr = proc.communicate()
 
-        print 'stdout: %s' % stdout
+        log.debug('stdout: %s' % stdout)
 
         if stderr:
+            log.warn("stderr: %s" % stderr)
             if ("object has no attribute" in stderr or
                 'ImportError' in stderr):
-                print stderr
-                print 'HARD CLEANING!'
+                log.warn('HARD CLEANING!')
                 self.bench_repo.hard_clean()
-            print stderr
 
         if not os.path.exists(results_path):
-            print 'Failed for revision %s' % rev
+            log.warn('Failed for revision %s' % rev)
             return len(need_to_run), {}
 
         results = pickle.load(open(results_path, 'r'))
@@ -204,6 +225,11 @@ class BenchmarkRunner(object):
         elif isinstance(self.run_option, int):
             revs_to_run = rev_by_timestamp.values[::self.run_option]
         else:
-            raise Exception('unrecognized run_option %s' % self.run_option)
+            raise ValueError('unrecognized run_option=%r' % self.run_option)
+
+        if not self.run_order in _RUN_ORDERS:
+            raise ValueError('unrecognized run_order=%r. Must be among %s'
+                             % (self.run_order, _RUN_ORDERS.keys()))
+        revs_to_run = _RUN_ORDERS[self.run_order](revs_to_run)
 
         return revs_to_run
