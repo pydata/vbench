@@ -44,15 +44,15 @@ class BenchmarkRunner(object):
     def __init__(self, benchmarks, repo_path, repo_url,
                  build_cmd, db_path, tmp_dir,
                  prep_cmd,
-                 clean_cmd,
+                 clean_cmd=None,
                  run_option='eod', run_order='normal',
                  start_date=None, overwrite=False,
                  module_dependencies=None,
                  always_clean=False,
                  use_blacklist=True):
         log.info("Initializing benchmark runner for %d benchmarks" % (len(benchmarks)))
-        self.benchmarks = benchmarks
-        self.checksums = [b.checksum for b in benchmarks]
+        self._benchmarks = None
+        self._checksums = None
 
         self.start_date = start_date
         self.run_option = run_option
@@ -75,12 +75,24 @@ class BenchmarkRunner(object):
                                     clean_cmd,
                                     always_clean=always_clean,
                                     dependencies=module_dependencies)
+
+        self.benchmarks = benchmarks
+
+    def _get_benchmarks(self):
+        return self._benchmarks
+
+    def _set_benchmarks(self, benchmarks):
+        self._benchmarks = benchmarks
+        self._checksums = [b.checksum for b in benchmarks]
         self._register_benchmarks()
+
+    benchmarks = property(fget=_get_benchmarks, fset=_set_benchmarks)
+    checksums = property(fget=lambda self:self._checksums)
 
     def run(self):
         log.info("Collecting revisions to run")
         revisions = self._get_revisions_to_run()
-
+        ran_revisions = []
         log.info("Running benchmarks for %d revisions" % (len(revisions),))
         for rev in revisions:
             if self.use_blacklist and rev in self.blacklist:
@@ -88,6 +100,10 @@ class BenchmarkRunner(object):
                 continue
 
             any_succeeded, n_active = self._run_and_write_results(rev)
+            ran_revisions.append((rev, (any_succeeded, n_active)))
+            log.debug("%s succeeded among %d active benchmarks",
+                      {True: "Some", False: "None"}[any_succeeded],
+                      n_active)
             if not any_succeeded and n_active > 0:
                 self.bench_repo.hard_clean()
 
@@ -99,6 +115,7 @@ class BenchmarkRunner(object):
                     and self.use_blacklist):
                     log.warn('Blacklisting %s' % rev)
                     self.db.add_rev_blacklist(rev)
+        return ran_revisions
 
     def _run_and_write_results(self, rev):
         """
@@ -164,7 +181,11 @@ class BenchmarkRunner(object):
                                 cwd=self.tmp_dir)
         stdout, stderr = proc.communicate()
 
-        log.debug('stdout: %s' % stdout)
+        if stdout:
+            log.debug('stdout: %s' % stdout)
+
+        if proc.returncode:
+            log.warn("Returned with non-0 code: %d" % proc.returncode)
 
         if stderr:
             log.warn("stderr: %s" % stderr)

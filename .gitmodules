@@ -1,0 +1,6 @@
+[submodule "vbench/tests/test-repo/vbenchtest"]
+	path = vbench/tests/test-repo/vbenchtest
+	url = git://github.com/yarikoptic/vbenchtest.git
+[submodule "vbench/tests/vbenchtest/vbenchtest"]
+	path = vbench/tests/vbenchtest/vbenchtest
+	url = git://github.com/yarikoptic/vbenchtest.git

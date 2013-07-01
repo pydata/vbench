@@ -29,9 +29,12 @@ __author__ = 'Yaroslav Halchenko'
 __copyright__ = 'Copyright (c) 2013 Yaroslav Halchenko'
 __license__ = 'MIT'
 
+from itertools import chain
 from math import ceil
 
-import sys, subprocess
+import importlib, sys, subprocess
+
+from vbench.benchmark import Benchmark
 
 import logging
 log = logging.getLogger('vb')
@@ -99,13 +102,48 @@ def run_cmd(cmd, stderr_levels=('warn', 'error'), **kwargs):
             stderr=subprocess.PIPE,
             **kwargs)
     stdout, stderr = proc.communicate()
-    if stdout: log.debug(stdout)
+    if stdout: log.debug("stdout: " + stdout)
     if stderr:
         stderr_level = stderr_levels[int(proc.returncode>0)]
         if stderr_level:
-            getattr(log, stderr_level)(stderr)
+            getattr(log, stderr_level)("stderr: " + stderr)
     return proc
 
-def is_interactive():
-    """Return True if all in/outs are tty"""
-    return sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()
+# TODO: join two together
+def collect_benchmarks_from_object(obj):
+    if isinstance(obj, Benchmark):
+        return [obj]
+    elif isinstance(obj, list) or isinstance(obj, tuple):
+        return [x for x in obj if isinstance(x, Benchmark)]
+        ## no recursion for now
+        #list(chain(*[collect_benchmarks(x) for x in obj]))
+    else:
+        return []
+
+def collect_benchmarks(modules):
+    log.info("Collecting benchmarks from modules %s" % " ".join(modules))
+    benchmarks = []
+
+    for module_name in modules:
+        log.debug(" Loading %s" % module_name)
+        ref = importlib.import_module(module_name)
+        new_benchmarks = list(chain(
+            *[collect_benchmarks_from_object(x) for x in ref.__dict__.values()]))
+        for bm in new_benchmarks:
+            assert(bm.name is not None)
+            bm.module_name = module_name
+        benchmarks.extend(new_benchmarks)
+
+    # Verify that they are all unique according to their checksums
+    checksums = [b.checksum for b in benchmarks]
+    if not (len(checksums) == len(set(checksums))):
+        # Houston we have a problem
+        checksums_ = set()
+        for b in benchmarks:
+            if b.checksum in checksums_:
+                log.error(" Benchmark %s already known" % b)
+            else:
+                checksums_.add(b.checksum)
+
+        raise ValueError("There were duplicate benchmarks -- check if you didn't leak variables")
+    return benchmarks

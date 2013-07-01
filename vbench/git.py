@@ -159,7 +159,6 @@ class BenchRepo(object):
         log.debug("Repopulating %s" % self.target_dir)
         self._clone(self.target_dir_tmp, self.target_dir, rm=True)
         self._prep()
-        self._copy_benchmark_scripts_and_deps()
 
     def _clone(self, source, target, rm=False):
         log.info("Cloning %s over to %s" % (source, target))
@@ -190,11 +189,14 @@ class BenchRepo(object):
         """
         rev: git SHA
         """
+        log.info("Switching to revision %s", rev)
         if self.always_clean:
             self.hard_clean()
         else:
             self._clean()
+
         self._checkout(rev)
+        self._copy_benchmark_scripts_and_deps()
         self._clean_pyc_files()
         self._build()
 

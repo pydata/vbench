@@ -31,7 +31,7 @@ __license__ = 'MIT'
 
 import logging, sys
 
-from vbench.utils import is_interactive
+from vbench.config import is_interactive
 
 # Recipe from http://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output
 # by Brandon Thomson

@@ -23,7 +23,7 @@ import inspect
 class Benchmark(object):
 
     def __init__(self, code, setup, ncalls=None, repeat=3, cleanup=None,
-                 name=None, description=None, start_date=None,
+                 name=None, module_name=None, description=None, start_date=None,
                  logy=False):
         self.code = code
         self.setup = setup
@@ -38,6 +38,7 @@ class Benchmark(object):
                 pass
 
         self.name = name
+        self.module_name = module_name
 
         self.description = description
         self.start_date = start_date
