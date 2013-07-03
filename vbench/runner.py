@@ -2,7 +2,7 @@ import cPickle as pickle
 import os
 import subprocess
 
-from vbench.git import GitRepo, BenchRepo
+from vbench.git import GitRepo, BenchRepo, FailedToBuildError
 from vbench.db import BenchmarkDB
 from vbench.utils import multires_order
 
@@ -66,8 +66,6 @@ class BenchmarkRunner(object):
 
         self.use_blacklist = use_blacklist
 
-        self.blacklist = set(self.db.get_rev_blacklist())
-
         # where to copy the repo
         self.tmp_dir = tmp_dir
         self.bench_repo = BenchRepo(repo_url, self.tmp_dir, build_cmd,
@@ -89,47 +87,74 @@ class BenchmarkRunner(object):
     benchmarks = property(fget=_get_benchmarks, fset=_set_benchmarks)
     checksums = property(fget=lambda self:self._checksums)
 
+    @property
+    def blacklist(self):
+        return set(self.db.get_rev_blacklist())
+
+    def _blacklist_rev(self, rev, msg=""):
+        if self.use_blacklist:
+            log.warn(('Blacklisting %s' % rev) + ": %s" % msg if msg else ".")
+            self.db.add_rev_blacklist(rev)
+
     def run(self):
         log.info("Collecting revisions to run")
         revisions = self._get_revisions_to_run()
         ran_revisions = []
         log.info("Running benchmarks for %d revisions" % (len(revisions),))
+        # get the current black list (might be a different one on a next .run())
+        blacklist = self.blacklist
         for rev in revisions:
-            if self.use_blacklist and rev in self.blacklist:
+            if self.use_blacklist and rev in blacklist:
                 log.warn('Skipping blacklisted %s' % rev)
                 continue
 
-            any_succeeded, n_active = self._run_and_write_results(rev)
+            try:
+                any_succeeded, n_active = self._run_and_write_results(rev)
+            except FailedToBuildError, e:
+                self._blacklist_rev(rev, msg=str(e))
+                continue
+
+            # All the rerunning below somewhat obscures the destiny of
+            # ran_revisions. TODO: make it clear(er)
             ran_revisions.append((rev, (any_succeeded, n_active)))
-            log.debug("%s succeeded among %d active benchmarks",
-                      {True: "Some", False: "None"}[any_succeeded],
-                      n_active)
-            if not any_succeeded and n_active > 0:
-                self.bench_repo.hard_clean()
 
-                any_succeeded2, n_active = self._run_and_write_results(rev)
+            if n_active:
+                log.debug("%s succeeded among %d active benchmarks",
+                          {True: "Some", False: "None"}[any_succeeded],
+                          n_active)
+                if not any_succeeded:
+                    # Give them a second chance
+                    self.bench_repo.hard_clean()
+                    try:
+                        any_succeeded2, n_active2 = self._run_and_write_results(rev)
+                    except FailedToBuildError, e:
+                        log.warn("Failed to build upon 2nd attempt to benchmark, "
+                                 "verify build infrastructure. Skipping for now: %s" % e)
+                        continue
 
-                # just guessing that this revision is broken, should stop
-                # wasting our time
-                if (not any_succeeded2 and n_active > 5
-                    and self.use_blacklist):
-                    log.warn('Blacklisting %s' % rev)
-                    self.db.add_rev_blacklist(rev)
+                    assert(n_active == n_active2,
+                           "Since not any_succeeded, number of benchmarks should remain the same")
+                    # just guessing that this revision is broken, should stop
+                    # wasting our time
+                    if (not any_succeeded2 and n_active > 5):
+                        self._blacklist_rev(rev, "None benchmark among %d has succeeded" % n_active)
         return ran_revisions
 
     def _run_and_write_results(self, rev):
         """
         Returns True if any runs succeeded
         """
-        n_active_benchmarks, results = self._run_revision(rev)
-        tracebacks = []
+        active_benchmarks = self._get_benchmarks_for_rev(rev)
+
+        if not active_benchmarks:
+            log.info('No benchmarks need running at %s' % rev)
+            return False, 0
 
         any_succeeded = False
 
-        for checksum, timing in results.iteritems():
-            if 'traceback' in timing:
-                tracebacks.append(timing['traceback'])
+        results = self._run_revision(rev, active_benchmarks)
 
+        for checksum, timing in results.iteritems():
             timestamp = self.repo.timestamps[rev]
 
             any_succeeded = any_succeeded or 'timing' in timing
@@ -139,7 +164,7 @@ class BenchmarkRunner(object):
                                  timing.get('timing'),
                                  timing.get('traceback'))
 
-        return any_succeeded, n_active_benchmarks
+        return any_succeeded, len(active_benchmarks)
 
     def _register_benchmarks(self):
         log.info('Getting benchmarks')
@@ -153,15 +178,9 @@ class BenchmarkRunner(object):
                 log.info('Writing new benchmark %s, %s' % (bm.name, bm.checksum))
                 self.db.write_benchmark(bm)
 
-    def _run_revision(self, rev):
-        need_to_run = self._get_benchmarks_for_rev(rev)
-
-        if not need_to_run:
-            log.info('No benchmarks need running at %s' % rev)
-            return 0, {}
-
-        log.info('Running %d benchmarks for revision %s' % (len(need_to_run), rev))
-        for bm in need_to_run:
+    def _run_revision(self, rev, benchmarks):
+        log.info('Running %d benchmarks for revision %s' % (len(benchmarks), rev))
+        for bm in benchmarks:
             log.debug(bm.name)
 
         self.bench_repo.switch_to_revision(rev)
@@ -170,7 +189,7 @@ class BenchmarkRunner(object):
         results_path = os.path.join(self.tmp_dir, 'results.pickle')
         if os.path.exists(results_path):
             os.remove(results_path)
-        pickle.dump(need_to_run, open(pickle_path, 'w'))
+        pickle.dump(benchmarks, open(pickle_path, 'w'))
 
         # run the process
         cmd = 'python vb_run_benchmarks.py %s %s' % (pickle_path, results_path)
@@ -185,7 +204,7 @@ class BenchmarkRunner(object):
             log.debug('stdout: %s' % stdout)
 
         if proc.returncode:
-            log.warn("Returned with non-0 code: %d" % proc.returncode)
+            log.warn("vb_run_benchmark.py returned with non-0 code: %d" % proc.returncode)
 
         if stderr:
             log.warn("stderr: %s" % stderr)
@@ -196,7 +215,7 @@ class BenchmarkRunner(object):
 
         if not os.path.exists(results_path):
             log.warn('Failed for revision %s' % rev)
-            return len(need_to_run), {}
+            return {}
 
         results = pickle.load(open(results_path, 'r'))
 
@@ -205,7 +224,7 @@ class BenchmarkRunner(object):
         except OSError:
             pass
 
-        return len(need_to_run), results
+        return results
 
     def _get_benchmarks_for_rev(self, rev):
         existing_results = self.db.get_rev_results(rev)

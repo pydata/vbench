@@ -11,6 +11,8 @@ from vbench.utils import run_cmd
 import logging
 log = logging.getLogger('vb.git')
 
+class FailedToBuildError(Exception):
+    pass
 
 class Repo(object):
 
@@ -211,6 +213,9 @@ class BenchRepo(object):
         cmd = ';'.join([x for x in self.build_cmds.split('\n')
                         if len(x.strip()) > 0])
         proc = run_cmd(cmd, shell=True, cwd=self.target_dir)
+        if proc.returncode:
+            raise FailedToBuildError(
+                "Failed to build. See stderr in the log for details")
 
     def _prep(self):
         cmd = ';'.join([x for x in self.prep_cmd.split('\n')

@@ -14,13 +14,14 @@ from os.path import exists, join as pjoin, dirname, basename
 from nose.tools import ok_, eq_
 from numpy.testing import assert_array_equal
 
+from vbench.api import BenchmarkRunner
+
 #import logging
 #log = logging.getLogger('vb')
 #log.setLevel('DEBUG')
 
 
 def test_benchmarkrunner():
-    from vbench.api import BenchmarkRunner
     from suite import *
 
     # Just to make sure there are no left-overs
@@ -36,12 +37,16 @@ def test_benchmarkrunner():
                              start_date=START_DATE,
                              module_dependencies=DEPENDENCIES)
     revisions_to_run = runner._get_revisions_to_run()
-    eq_(len(revisions_to_run), 4)                # we had 4 so far
+    eq_(len(revisions_to_run), 6)                # we have 6 now
 
     revisions_ran = runner.run()
     # print "D1: ", revisions_ran
-    assert_array_equal([x[0] for x in revisions_ran],
-                       revisions_to_run)
+    # for this test we should inject our "failed to build revision"
+    # Since no tests were ran for it -- it is not reported
+    revisions_ran_ = [x[0] for x in revisions_ran]
+    revisions_ran_.insert(4, 'e83ffa5')
+    assert_array_equal(revisions_ran_, revisions_to_run)
+
     # First revision
     eq_(revisions_ran[0][1], (False, 3))    # no functions were available at that point
     eq_(revisions_ran[1][1], (True, 3))     # all 3 tests were available in the first rev
@@ -49,7 +54,7 @@ def test_benchmarkrunner():
     ok_(exists(TMP_DIR))
     ok_(exists(DB_PATH))
 
-    eq_(len(runner.blacklist), 0)
+    eq_(runner.blacklist, set(['e83ffa5']))   # one which failed to build
 
     # Run 2nd time and verify that all are still listed BUT none new succeeds
     revisions_ran = runner.run()
