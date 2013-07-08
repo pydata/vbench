@@ -147,3 +147,24 @@ def collect_benchmarks(modules):
 
         raise ValueError("There were duplicate benchmarks -- check if you didn't leak variables")
     return benchmarks
+
+def verify_benchmarks(benchmarks, raise_=False):
+    log.info("Verifying correct operation of benchmarks on system-wide available version of the libraries")
+    passed, failed = [], []
+    for bm in benchmarks:
+        result = bm.run(ncalls=1, repeat=1)
+        if not result['succeeded']:
+            log.warn("%s failed in stage %s with traceback: %s"
+                     % (bm, result['stage'], result['traceback']))
+            failed.append(bm)
+        else:
+            log.debug("%s verified" % bm)
+            passed.append(bm)
+    if len(failed):
+        if raise_:
+            raise RuntimeError("%d benchmarks failed verification. See log for more details"
+                            % len(failed))
+    else:
+        log.info("All %d benchmarks verified to operate correctly"
+                 % len(benchmarks))
+    return passed, failed

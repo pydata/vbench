@@ -408,3 +408,4 @@ def gather_benchmarks(ns):
         elif isinstance(v, BenchmarkSuite):
             benchmarks.extend(v.benchmarks)
     return benchmarks
+
