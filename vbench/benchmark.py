@@ -79,15 +79,23 @@ class Benchmark(object):
         db = BenchmarkDB.get_instance(db_path)
         return db.get_benchmark_results(self.checksum)
 
-    def run(self):
+    def run(self, ncalls=None, repeat=None):
+        """
+        Parameters
+        ----------
+        ncalls: int, optional
+          If specified and non-0, would override specified in constructor ncalls
+        repeat: int, optional
+          If specified and non-0, would override specified in constructor repeat
+        """
         ns = None
         try:
             stage = 'setup'
             ns = self._setup()
 
             stage = 'benchmark'
-            result = magic_timeit(ns, self.code, ncalls=self.ncalls,
-                                  repeat=self.repeat, force_ms=True)
+            result = magic_timeit(ns, self.code, ncalls=ncalls or self.ncalls,
+                                  repeat=repeat or self.repeat, force_ms=True)
             result['succeeded'] = True
         except:
             buf = StringIO()
