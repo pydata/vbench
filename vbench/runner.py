@@ -49,10 +49,14 @@ class BenchmarkRunner(object):
                  start_date=None, overwrite=False,
                  module_dependencies=None,
                  always_clean=False,
-                 use_blacklist=True):
+                 use_blacklist=True,
+                 verify=False):
         log.info("Initializing benchmark runner for %d benchmarks" % (len(benchmarks)))
         self._benchmarks = None
         self._checksums = None
+
+        if verify:
+            self.verify_benchmarks(benchmarks=benchmarks)
 
         self.start_date = start_date
         self.run_option = run_option
@@ -139,6 +143,29 @@ class BenchmarkRunner(object):
                     if (not any_succeeded2 and n_active > 5):
                         self._blacklist_rev(rev, "None benchmark among %d has succeeded" % n_active)
         return ran_revisions
+
+    def verify_benchmarks(self, benchmarks=None, rev=None):
+        if rev is not None:
+            raise NotImplementedError("Verification is not yet implemented against a preset revision")
+        # if provided -- use them, otherwise use registered ones
+        benchmarks = benchmarks or self.benchmarks
+        log.info("Verifying correct operation of benchmarks on system-wide available version of the libraries")
+        failed = []
+        for bm in benchmarks:
+            result = bm.run(ncalls=1, repeat=1)
+            if not result['succeeded']:
+                log.warn("%s failed in stage %s with traceback: %s"
+                         % (bm, result['stage'], result['traceback']))
+                failed.append(bm)
+            else:
+                log.debug("%s verified" % bm)
+        if len(failed):
+            raise RuntimeError("%d benchmarks failed verification. See log for more details"
+                               % len(failed))
+        else:
+            log.info("All %d benchmarks verified to operate correctly"
+                     % len(benchmarks))
+
 
     def _run_and_write_results(self, rev):
         """
