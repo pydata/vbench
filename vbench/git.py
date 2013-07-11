@@ -39,8 +39,15 @@ class GitRepo(Repo):
 
     def _parse_commit_log(self):
         log.debug("Parsing the commit log of %s" % self.repo_path)
-        githist = self.git + ('log --graph --pretty=format:'
-                              '\"::%h::%cd::%s::%an\" > githist.txt')
+        # yoh: using --first-parent so we traverse only the "main"
+        #      chain of commits, thus avoiding jumping across possibly
+        #      present multiple parallel branches which would introduce
+        #      different performance impacts, and in general might be of
+        #      no interest (unless they are already merged in the main line)
+        # TODO: make it optional
+        githist = self.git + ('log --graph  --pretty=format:'
+                              '\"::%h::%cd::%s::%an\" --first-parent'
+                              '> githist.txt')
         os.system(githist)
         githist = open('githist.txt').read()
         os.remove('githist.txt')
