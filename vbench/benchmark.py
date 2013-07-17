@@ -13,6 +13,7 @@ except ImportError:
 
 import gc
 import hashlib
+import re
 import time
 import traceback
 import inspect
@@ -124,6 +125,11 @@ class Benchmark(object):
             gc.enable()
 
         return elapsed
+
+    def get_rst_label(self):
+        """Return a label which can be used for rst referencing
+        """
+        return re.sub('[][(),:\- ]', '_', self.name)
 
     def to_rst(self, image_path=None):
         output = """**Benchmark setup**
