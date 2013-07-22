@@ -190,7 +190,13 @@ class BenchmarkRunner(object):
                 self.db.write_benchmark(bm)
 
     def _run_revision(self, rev, benchmarks):
-        log.info('Running %d benchmarks for revision %s' % (len(benchmarks), rev))
+        # for enhanced logging -- get information about the revision:
+        rev_info = self.repo.get_commit_info(rev)
+        rev_s = str(rev)
+        if rev_info:
+            rev_s += ": %(timestamp)s [%(authors)s] %(message)s" % rev_info
+        log.info('Running %d benchmarks for revision %s' % (len(benchmarks), rev_s))
+
         for bm in benchmarks:
             log.debug(bm.name)
 
