@@ -142,6 +142,23 @@ class GitRepo(Repo):
     def checkout(self, sha):
         pass
 
+    def get_commit_info(self, sha):
+        # since all the information is stored in separate series, find
+        # that revision first
+        sha_where = np.where(self.shas.values==sha)
+        if not len(sha_where):
+            return None
+        if len(sha_where[0])>1:
+            log.warning("Found multiple (%d) entries corresponding to %s."
+                        % (len(sha_where[0], sha)))
+            return None
+        i = sha_where[0][0]
+        return {'timestamp': self.timestamps[i],
+                'sha': sha,
+                'message': self.messages[i],
+                'authors': self.authors[i]}
+
+
 class BenchRepo(object):
     """
     Manage an isolated copy of a repository for benchmarking
