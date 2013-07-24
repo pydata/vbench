@@ -42,7 +42,7 @@ def generate_rst_files(benchmarks, dbpath, outpath, description=""):
         log.debug('Generating rst file for %s' % bmk.name)
         rst_path = os.path.join(outpath, 'vbench/%s.rst' % bmk.name)
 
-        fig_full_path = os.path.join(fig_base_path, '%s.png' % bmk.name)
+        fig_full_path = os.path.join(fig_base_path, '%s.png' % bmk.get_rst_label())
 
         # make the figure
         plt.figure(figsize=(10, 6))
@@ -55,7 +55,7 @@ def generate_rst_files(benchmarks, dbpath, outpath, description=""):
         plt.savefig(fig_full_path, bbox_inches='tight')
         plt.close('all')
 
-        fig_rel_path = 'vbench/figures/%s.png' % bmk.name
+        fig_rel_path = 'vbench/figures/%s.png' % bmk.get_rst_label()
         rst_text = bmk.to_rst(image_path=fig_rel_path)
         with open(rst_path, 'w') as f:
             f.write(rst_text)

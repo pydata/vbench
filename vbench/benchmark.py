@@ -127,7 +127,7 @@ class Benchmark(object):
         return elapsed
 
     def get_rst_label(self):
-        """Return a label which can be used for rst referencing
+        """Return a sanitized label which can be used for rst referencing, figure files names etc
         """
         return re.sub('[][(),:\- ]', '_', self.name)
 
