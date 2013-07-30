@@ -28,24 +28,25 @@ def test_benchmarkrunner():
     shutil.rmtree(TMP_DIR)
     if exists(DB_PATH):
         os.unlink(DB_PATH)
-    ok_(not exists(DB_PATH))
+    ok_(not exists(DB_PATH), "%s should not yet exist" % TMP_DIR)
 
     runner = BenchmarkRunner(benchmarks, REPO_PATH, REPO_URL,
                              BUILD, DB_PATH, TMP_DIR, PREPARE,
+                             branches=BRANCHES,
                              clean_cmd=CLEAN,
                              run_option='all', run_order='normal',
                              start_date=START_DATE,
                              module_dependencies=DEPENDENCIES)
     revisions_to_run = runner._get_revisions_to_run()
-    eq_(len(revisions_to_run), 6)                # we have 6 now
-
+    eq_(len(revisions_to_run), 7, "we should have only this many revisions")
     revisions_ran = runner.run()
     # print "D1: ", revisions_ran
     # for this test we should inject our "failed to build revision"
     # Since no tests were ran for it -- it is not reported
     revisions_ran_ = [x[0] for x in revisions_ran]
     revisions_ran_.insert(4, 'e83ffa5')
-    assert_array_equal(revisions_ran_, revisions_to_run)
+    assert_array_equal(revisions_ran_, revisions_to_run,
+       "All revisions should have been ran")
 
     # First revision
     eq_(revisions_ran[0][1], (False, 3))    # no functions were available at that point
@@ -83,7 +84,7 @@ def test_benchmarkrunner():
 
     # Verify that it all looks close to the desired
     image_files = [basename(x) for x in glob(pjoin(rstdir, 'vbench/figures/*.png'))]
-    target_image_files = [b.name + '.png' for b in runner.benchmarks]
+    target_image_files = [b.get_rst_label() + '.png' for b in runner.benchmarks]
     eq_(set(image_files), set(target_image_files))
 
     rst_files = [basename(x) for x in glob(pjoin(rstdir, 'vbench/*.rst'))]

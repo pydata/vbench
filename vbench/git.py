@@ -1,4 +1,5 @@
 from dateutil import parser
+import itertools
 import subprocess
 import os
 import shutil
@@ -25,19 +26,23 @@ class GitRepo(Repo):
     Read some basic statistics about a git repository
     """
 
-    def __init__(self, repo_path):
+    def __init__(self, repo_path, branches=['master']):
         log.info("Initializing GitRepo to look at %s" % repo_path)
         self.repo_path = repo_path
         self.git = _git_command(self.repo_path)
-        (self.shas, self.messages,
-         self.timestamps, self.authors) = self._parse_commit_log()
+        self.commits, self.branches_shas \
+         = self._parse_commit_log(branches=branches)
 
     @property
     def commit_date(self):
         from pandas.core.datetools import normalize_date
         return self.timestamps.map(normalize_date)
 
-    def _parse_commit_log(self):
+    def _parse_commit_log_branch(self, branch='master', known_shas=[]):
+        """Parse a log for a single branch while following the first parent.
+
+        Stop parsing encountering a sha among known_shas
+        """
         log.debug("Parsing the commit log of %s" % self.repo_path)
         # yoh: using --first-parent so we traverse only the "main"
         #      chain of commits, thus avoiding jumping across possibly
@@ -46,8 +51,8 @@ class GitRepo(Repo):
         #      no interest (unless they are already merged in the main line)
         # TODO: make it optional
         githist = self.git + ('log --graph  --pretty=format:'
-                              '\"::%h::%cd::%s::%an\" --first-parent'
-                              '> githist.txt')
+                              '\"::%h::%cd::%s::%an\" --first-parent '
+                              + branch + ' > githist.txt')
         os.system(githist)
         githist = open('githist.txt').read()
         os.remove('githist.txt')
@@ -56,6 +61,7 @@ class GitRepo(Repo):
         timestamps = []
         messages = []
         authors = []
+        base_sha = None
         for line in githist.split('\n'):
             # skip commits not in mainline
             if not line[0] == '*':
@@ -70,6 +76,13 @@ class GitRepo(Repo):
             if stamp in timestamps:
                 continue
 
+            if sha in known_shas:
+                base_sha = sha
+                # So this one is the first already known sha, must be
+                # the first common ancestor of the branches with the
+                # branches we have previously parsed already
+                break
+
             shas.append(sha)
             timestamps.append(stamp)
             messages.append(message)
@@ -78,11 +91,33 @@ class GitRepo(Repo):
         # to UTC for now
         timestamps = _convert_timezones(timestamps)
 
-        shas = Series(shas, timestamps)
-        messages = Series(messages, shas)
-        timestamps = Series(timestamps, shas)
-        authors = Series(authors, shas)
-        return shas[::-1], messages[::-1], timestamps[::-1], authors[::-1]
+        return (shas[::-1], messages[::-1], timestamps[::-1], authors[::-1]), base_sha
+
+
+    def _parse_commit_log(self, branches):
+        known_shas = set()                # use set for faster lookups
+
+        commits = []
+        branches_shas = {}
+        for b in branches:
+            entry, base_sha = \
+              self._parse_commit_log_branch(b, known_shas)
+            shas = entry[0]
+            commits.append(entry)
+            known_shas.update(shas)
+            # store shas which belong to the branch including a base_sha
+            # if it is not None
+            branches_shas[b] = ([base_sha] if base_sha is not None else []) + shas
+
+        # Place all collected commits into a DataFrame
+        commits = DataFrame(dict([(k, sum(v, []))
+                            for k, v in zip(['shas', 'messages', 'timestamps', 'authors'],
+                                            itertools.izip(*commits))]))
+        # Index commits by shas -- they must be unique
+        commits = commits.set_index('shas')
+        # Sort by the timestamps
+        commits = commits.sort('timestamps')
+        return commits, branches_shas
 
     def get_churn(self, omit_shas=None, omit_paths=None):
         churn = self.get_churn_by_file()
@@ -99,7 +134,7 @@ class GitRepo(Repo):
         return by_date
 
     def get_churn_by_file(self):
-        hashes = self.shas.values
+        hashes = self.commits.shas.values
         prev = hashes[0]
 
         insertions = {}
@@ -145,18 +180,18 @@ class GitRepo(Repo):
     def get_commit_info(self, sha):
         # since all the information is stored in separate series, find
         # that revision first
-        sha_where = np.where(self.shas.values==sha)
-        if not len(sha_where):
+        if not sha in self.commits:
             return None
-        if len(sha_where[0])>1:
-            log.warning("Found multiple (%d) entries corresponding to %s."
+        return self.commits.ix[sha]
+        if len(commit)>1:
+            log.warning("Found multiple (%d) commits corresponding to %s."
                         % (len(sha_where[0], sha)))
             return None
         i = sha_where[0][0]
-        return {'timestamp': self.timestamps[i],
+        return {'timestamp': self.commits.timestamps[i],
                 'sha': sha,
-                'message': self.messages[i],
-                'authors': self.authors[i]}
+                'message': self.commits.messages[i],
+                'authors': self.commits.authors[i]}
 
 
 class BenchRepo(object):

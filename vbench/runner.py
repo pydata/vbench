@@ -45,6 +45,7 @@ class BenchmarkRunner(object):
                  build_cmd, db_path, tmp_dir,
                  prep_cmd,
                  clean_cmd=None,
+                 branches=['master'],
                  run_option='eod', run_order='normal',
                  start_date=None, overwrite=False,
                  module_dependencies=None,
@@ -65,7 +66,7 @@ class BenchmarkRunner(object):
         self.repo_path = repo_path
         self.db_path = db_path
 
-        self.repo = GitRepo(self.repo_path)
+        self.repo = GitRepo(self.repo_path, branches=branches)
         self.db = BenchmarkDB(db_path)
 
         self.use_blacklist = use_blacklist
@@ -166,7 +167,7 @@ class BenchmarkRunner(object):
         results = self._run_revision(rev, active_benchmarks)
 
         for checksum, timing in results.iteritems():
-            timestamp = self.repo.timestamps[rev]
+            timestamp = self.repo.commits.timestamps[rev]
 
             any_succeeded = any_succeeded or 'timing' in timing
 
@@ -247,7 +248,7 @@ class BenchmarkRunner(object):
         existing_results = self.db.get_rev_results(rev)
         need_to_run = []
 
-        timestamp = self.repo.timestamps[rev]
+        timestamp = self.repo.commits.timestamps[rev]
 
         for b in self.benchmarks:
             if b.start_date is not None and b.start_date > timestamp:
@@ -262,7 +263,9 @@ class BenchmarkRunner(object):
 
         # TODO generalize someday to other vcs...git only for now
 
-        rev_by_timestamp = self.repo.shas.sort_index()
+        # Get a series of shas indexed by the timestamp.
+        # yoh: There must be a cleaner way, but my pandas-fu is limited
+        rev_by_timestamp = self.repo.commits.reset_index().set_index('timestamps')['shas']
 
         # # assume they're in order, but check for now
         # assert(rev_by_timestamp.index.is_monotonic)
