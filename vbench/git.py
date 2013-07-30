@@ -30,7 +30,7 @@ class GitRepo(Repo):
         log.info("Initializing GitRepo to look at %s" % repo_path)
         self.repo_path = repo_path
         self.git = _git_command(self.repo_path)
-        self.commits, self.branches_shas \
+        self.commits, self.sha_branches \
          = self._parse_commit_log(branches=branches)
 
     @property
@@ -98,7 +98,7 @@ class GitRepo(Repo):
         known_shas = set()                # use set for faster lookups
 
         commits = []
-        branches_shas = {}
+        sha_branches = {}
         for b in branches:
             entry, base_sha = \
               self._parse_commit_log_branch(b, known_shas)
@@ -107,7 +107,8 @@ class GitRepo(Repo):
             known_shas.update(shas)
             # store shas which belong to the branch including a base_sha
             # if it is not None
-            branches_shas[b] = ([base_sha] if base_sha is not None else []) + shas
+            for sha in ([base_sha] if base_sha is not None else []) + shas:
+                sha_branches[sha] = sha_branches.get(sha, []) + [b]
 
         # Place all collected commits into a DataFrame
         commits = DataFrame(dict([(k, sum(v, []))
@@ -117,7 +118,7 @@ class GitRepo(Repo):
         commits = commits.set_index('shas')
         # Sort by the timestamps
         commits = commits.sort('timestamps')
-        return commits, branches_shas
+        return commits, sha_branches
 
     def get_churn(self, omit_shas=None, omit_paths=None):
         churn = self.get_churn_by_file()
@@ -183,15 +184,6 @@ class GitRepo(Repo):
         if not sha in self.commits:
             return None
         return self.commits.ix[sha]
-        if len(commit)>1:
-            log.warning("Found multiple (%d) commits corresponding to %s."
-                        % (len(sha_where[0], sha)))
-            return None
-        i = sha_where[0][0]
-        return {'timestamp': self.commits.timestamps[i],
-                'sha': sha,
-                'message': self.commits.messages[i],
-                'authors': self.commits.authors[i]}
 
 
 class BenchRepo(object):

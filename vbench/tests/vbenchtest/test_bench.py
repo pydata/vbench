@@ -77,24 +77,36 @@ def test_benchmarkrunner():
     for rev, v in revisions_ran:
         eq_(v, (False, 0))
 
+    eq_(set(runner.db.get_branches()), set(['origin/branch1', 'master']))
+    # check that 'ecf481d' is marked present in both branches
+    # in DB:
+    eq_(set(runner.db.get_branch_revs('origin/branch1')), set(['d22c3e7', 'ecf481d']))
+    ok_('ecf481d' in runner.db.get_branch_revs('master'))
+
+    # in the GitRepo
+    eq_(set(runner.repo.sha_branches['ecf481d']), set(['master', 'origin/branch1']))
+
     # Now let's smoke test generation of the .rst files
     from vbench.reports import generate_rst_files
     rstdir = pjoin(TMP_DIR, 'sources')
-    generate_rst_files(runner.benchmarks, DB_PATH, rstdir, """VERY LONG DESCRIPTION""")
+    # work in both modes -- agglomerate and per branch
+    for branches in (None, BRANCHES):
+        generate_rst_files(runner.benchmarks, DB_PATH, rstdir,
+                           description="""VERY LONG DESCRIPTION""", branches=branches)
 
-    # Verify that it all looks close to the desired
-    image_files = [basename(x) for x in glob(pjoin(rstdir, 'vbench/figures/*.png'))]
-    target_image_files = [b.get_rst_label() + '.png' for b in runner.benchmarks]
-    eq_(set(image_files), set(target_image_files))
+        # Verify that it all looks close to the desired
+        image_files = [basename(x) for x in glob(pjoin(rstdir, 'vbench/figures/*.png'))]
+        target_image_files = [b.get_rst_label() + '.png' for b in runner.benchmarks]
+        eq_(set(image_files), set(target_image_files))
 
-    rst_files = [basename(x) for x in glob(pjoin(rstdir, 'vbench/*.rst'))]
-    target_rst_files = [b.name + '.rst' for b in runner.benchmarks]
-    eq_(set(rst_files), set(target_rst_files))
+        rst_files = [basename(x) for x in glob(pjoin(rstdir, 'vbench/*.rst'))]
+        target_rst_files = [b.name + '.rst' for b in runner.benchmarks]
+        eq_(set(rst_files), set(target_rst_files))
 
-    module_files = [basename(x) for x in glob(pjoin(rstdir, '*.rst'))]
-    target_module_files = list(set(['vb_' + b.module_name + '.rst' for b in runner.benchmarks]))
-    eq_(set(module_files), set(target_module_files + ['index.rst']))
+        module_files = [basename(x) for x in glob(pjoin(rstdir, '*.rst'))]
+        target_module_files = list(set(['vb_' + b.module_name + '.rst' for b in runner.benchmarks]))
+        eq_(set(module_files), set(target_module_files + ['index.rst']))
 
-    #print TMP_DIR
+    #print TMP_DIR, DB_PATH, rstdir
     shutil.rmtree(TMP_DIR)
     shutil.rmtree(dirname(DB_PATH))

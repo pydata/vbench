@@ -152,35 +152,51 @@ class Benchmark(object):
 
         return output
 
-    def plot(self, db_path, label='time', ax=None, title=True):
+    def plot(self, db_path, branches=None, label='time', ax=None, title=True):
         import matplotlib.pyplot as plt
         from matplotlib.dates import MonthLocator, DateFormatter
 
+        from vbench.db import BenchmarkDB
+        db = BenchmarkDB.get_instance(db_path)
         results = self.get_results(db_path)
 
         if ax is None:
             fig = plt.figure()
             ax = fig.add_subplot(111)
+        if self.logy and branches is not None and len(branches):
+            raise NotImplementedError("Plotting with logy and multiple branches is not yet supported")
 
-        timing = results['timing']
-        if self.start_date is not None:
-            timing = timing.truncate(before=self.start_date)
+        for branch in (branches if branches is not None else [None]):
 
-        timing.plot(ax=ax, style='b-', label=label)
-        ax.set_xlabel('Date')
-        ax.set_ylabel('milliseconds')
+            # Select only the revisions belonging to the branch
+            results_ = results[[r in db.get_branch_revs(branch)
+                                for r in results.revision]] \
+                       if branch is not None else results
 
-        if self.logy:
-            ax2 = ax.twinx()
-            try:
-                timing.plot(ax=ax2, label='%s (log scale)' % label,
-                            style='r-',
-                            logy=self.logy)
-                ax2.set_ylabel('milliseconds (log scale)')
-                ax.legend(loc='best')
-                ax2.legend(loc='best')
-            except ValueError:
-                pass
+            timing = results_['timing']
+            if self.start_date is not None:
+                timing = timing.truncate(before=self.start_date)
+
+            label_ = "%s (%s)" % (branch, label) if branch is not None else label
+
+            timing.plot(ax=ax, style='-', label=label_)
+            ax.set_xlabel('Date')
+            ax.set_ylabel('milliseconds')
+
+            if self.logy:
+                ax2 = ax.twinx()
+                try:
+                    timing.plot(ax=ax2, label='%s (log scale)' % label,
+                                style='r-',
+                                logy=self.logy)
+                    ax2.set_ylabel('milliseconds (log scale)')
+                    ax.legend(loc='best')
+                    ax2.legend(loc='best')
+                except ValueError:
+                    pass
+
+        if branches is not None:
+            ax.legend(loc='best')
 
         ylo, yhi = ax.get_ylim()
 

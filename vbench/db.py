@@ -39,6 +39,10 @@ class BenchmarkDB(object):
             Column('revision', sqltypes.String(50), primary_key=True)
         )
 
+        self._branches = Table('branches', self._metadata,
+            Column('branch', sqltypes.String(50), primary_key=True),
+            Column('revision', sqltypes.String(50), primary_key=True),
+            )
         self._ensure_tables_created()
 
     _instances = {}
@@ -54,6 +58,7 @@ class BenchmarkDB(object):
         self._benchmarks.create(self._engine, checkfirst=True)
         self._results.create(self._engine, checkfirst=True)
         self._blacklist.create(self._engine, checkfirst=True)
+        self._branches.create(self._engine, checkfirst=True)
 
     def update_name(self, benchmark):
         """
@@ -154,6 +159,22 @@ class BenchmarkDB(object):
     def clear_blacklist(self):
         stmt = self._blacklist.delete()
         self.conn.execute(stmt)
+
+    def add_rev_branch(self, rev, branch):
+        if not rev in self.get_branch_revs(branch):
+            stmt = self._branches.insert().values(revision=rev, branch=branch)
+            self.conn.execute(stmt)
+
+    def get_branches(self):
+        # yoh: I bet there is a better way
+        stmt = sql.select([self._branches.c.branch])
+        return sorted(set([x[0] for x in self.conn.execute(stmt)]))
+
+    def get_branch_revs(self, branch):
+        tab = self._branches
+        stmt = sql.select([tab.c.revision],
+                          sql.and_(tab.c.branch == branch))
+        return [x['revision'] for x in self.conn.execute(stmt)]
 
     def get_benchmark_results(self, checksum):
         """

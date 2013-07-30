@@ -21,7 +21,7 @@ def group_benchmarks_by_module(benchmarks):
         benchmarks_by_module[module_name].append(b)
     return benchmarks_by_module
 
-def generate_rst_files(benchmarks, dbpath, outpath, description=""):
+def generate_rst_files(benchmarks, dbpath, outpath, branches=None, description=""):
     import matplotlib as mpl
     mpl.use('Agg')
     import matplotlib.pyplot as plt
@@ -47,7 +47,7 @@ def generate_rst_files(benchmarks, dbpath, outpath, description=""):
         # make the figure
         plt.figure(figsize=(10, 6))
         ax = plt.gca()
-        bmk.plot(dbpath, ax=ax)
+        bmk.plot(dbpath, branches=branches, ax=ax)
 
         start, end = ax.get_xlim()
 

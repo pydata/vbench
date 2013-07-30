@@ -175,6 +175,8 @@ class BenchmarkRunner(object):
                                  timing.get('loops'),
                                  timing.get('timing'),
                                  timing.get('traceback'))
+            for branch in self.repo.sha_branches[rev]:
+                self.db.add_rev_branch(rev=rev, branch=branch)
 
         return any_succeeded, len(active_benchmarks)
 
