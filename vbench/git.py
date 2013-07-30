@@ -1,5 +1,7 @@
-from dateutil import parser
+import datetime
+import time
 import itertools
+import rfc822
 import subprocess
 import os
 import shutil
@@ -20,6 +22,9 @@ class Repo(object):
     def __init__(self):
         raise NotImplementedError
 
+def rfc822_to_gmdatetime(stamp):
+    return datetime.datetime(
+        *time.gmtime(rfc822.mktime_tz(rfc822.parsedate_tz(stamp)))[:6])
 
 class GitRepo(Repo):
     """
@@ -36,25 +41,25 @@ class GitRepo(Repo):
     @property
     def commit_date(self):
         from pandas.core.datetools import normalize_date
-        return self.timestamps.map(normalize_date)
+        return self.commits.timestamps.map(normalize_date)
 
     def _parse_commit_log_branch(self, branch='master', known_shas=[]):
         """Parse a log for a single branch while following the first parent.
 
         Stop parsing encountering a sha among known_shas
         """
-        log.debug("Parsing the commit log of %s" % self.repo_path)
+        log.debug("Parsing the commit log of %s for branch %s" % (self.repo_path, branch))
         # yoh: using --first-parent so we traverse only the "main"
         #      chain of commits, thus avoiding jumping across possibly
         #      present multiple parallel branches which would introduce
         #      different performance impacts, and in general might be of
         #      no interest (unless they are already merged in the main line)
         # TODO: make it optional
-        githist = self.git + ('log --graph  --pretty=format:'
+        githist = self.git + ('log --graph --date=rfc2822 --pretty=format:'
                               '\"::%h::%cd::%s::%an\" --first-parent '
                               + branch + ' > githist.txt')
         os.system(githist)
-        githist = open('githist.txt').read()
+        githist = open('githist.txt').readlines()
         os.remove('githist.txt')
 
         shas = []
@@ -62,15 +67,18 @@ class GitRepo(Repo):
         messages = []
         authors = []
         base_sha = None
-        for line in githist.split('\n'):
+        for line in githist:
             # skip commits not in mainline
             if not line[0] == '*':
                 continue
             # split line into three real parts, ignoring git-graph in front
             _, sha, stamp, message, author = line.split('::', 4)
 
-            # parse timestamp into datetime object
-            stamp = parser.parse(stamp)
+            # parse timestamp into datetime object while discarding timezone
+            # It should provide ~80-90% speed up in comparison to
+            # dateutil.parser date format guessing
+            stamp = rfc822_to_gmdatetime(stamp)
+
             # avoid duplicate timestamps by ignoring them
             # presumably there is a better way to deal with this
             if stamp in timestamps:
@@ -88,8 +96,9 @@ class GitRepo(Repo):
             messages.append(message)
             authors.append(author)
 
-        # to UTC for now
-        timestamps = _convert_timezones(timestamps)
+        # yoh: should be taken care of in rfc822_to_gmdatetime
+        ## # to UTC for now
+        ## timestamps = _convert_timezones(timestamps)
 
         return (shas[::-1], messages[::-1], timestamps[::-1], authors[::-1]), base_sha
 
