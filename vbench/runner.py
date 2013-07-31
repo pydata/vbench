@@ -152,11 +152,20 @@ class BenchmarkRunner(object):
             raise NotImplementedError("Verification is not yet implemented against a preset revision")
         return verify_benchmarks(self.benchmarks)
 
+    def _add_rev_branches(self, rev):
+        """Add information about branches for the given revision into DB
+        """
+        for branch in self.repo.sha_branches[rev]:
+            self.db.add_rev_branch(rev=rev, branch=branch)
+
     def _run_and_write_results(self, rev):
         """
         Returns True if any runs succeeded
         """
         active_benchmarks = self._get_benchmarks_for_rev(rev)
+
+        # Assure up-to-date information about revision->branches
+        self._add_rev_branches(rev)
 
         if not active_benchmarks:
             log.info('No benchmarks need running at %s' % rev)
@@ -175,8 +184,6 @@ class BenchmarkRunner(object):
                                  timing.get('loops'),
                                  timing.get('timing'),
                                  timing.get('traceback'))
-            for branch in self.repo.sha_branches[rev]:
-                self.db.add_rev_branch(rev=rev, branch=branch)
 
         return any_succeeded, len(active_benchmarks)
 
