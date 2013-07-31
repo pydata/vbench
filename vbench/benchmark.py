@@ -18,7 +18,12 @@ import time
 import traceback
 import inspect
 
+import numpy as np
+
 # from pandas.util.testing import set_trace
+
+import logging
+log = logging.getLogger('vb.benchmark')
 
 
 class Benchmark(object):
@@ -169,9 +174,13 @@ class Benchmark(object):
         for branch in (branches if branches is not None else [None]):
 
             # Select only the revisions belonging to the branch
-            results_ = results[[r in db.get_branch_revs(branch)
-                                for r in results.revision]] \
-                       if branch is not None else results
+            branch_revs = db.get_branch_revs(branch)
+            results_ = results[np.in1d(results.revision, branch_revs)]
+            if not len(results_):
+                log.warning("Skipping plotting for branch %s since no revisions"
+                            " were benchmarked for it" % branch)
+                continue
+            log.warning("Plotting for branch %s with %s revisions" % (branch, len(results_)))
 
             timing = results_['timing']
             if self.start_date is not None:
