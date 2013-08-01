@@ -171,6 +171,7 @@ class Benchmark(object):
         if self.logy and branches is not None and len(branches):
             raise NotImplementedError("Plotting with logy and multiple branches is not yet supported")
 
+        xlims = [] # xlimits to all plots to assure a full dates coverage
         for branch in (branches if branches is not None else [None]):
 
             # Select only the revisions belonging to the branch
@@ -180,7 +181,7 @@ class Benchmark(object):
                 log.warning("Skipping plotting for branch %s since no revisions"
                             " were benchmarked for it" % branch)
                 continue
-            log.warning("Plotting for branch %s with %s revisions" % (branch, len(results_)))
+            log.log(8, "Plotting for branch %s with %s revisions" % (branch, len(results_)))
 
             timing = results_['timing']
             if self.start_date is not None:
@@ -189,6 +190,7 @@ class Benchmark(object):
             label_ = "%s (%s)" % (branch, label) if branch is not None else label
 
             timing.plot(ax=ax, style='-', label=label_)
+            xlims.append(ax.get_xlim())
             ax.set_xlabel('Date')
             ax.set_ylabel('milliseconds')
 
@@ -215,6 +217,7 @@ class Benchmark(object):
         formatter = DateFormatter("%b %Y")
         ax.xaxis.set_major_locator(MonthLocator())
         ax.xaxis.set_major_formatter(formatter)
+        ax.set_xlim((np.min(xlims, axis=0)[0], np.max(xlims, axis=0)[1]))
         ax.autoscale_view(scalex=True)
 
         if title:
