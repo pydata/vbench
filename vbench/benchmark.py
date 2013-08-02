@@ -401,10 +401,19 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
                              'setup': "pass"}
     # Track compilation time so it can be reported if too long
     # Minimum time above which compilation time will be reported
-    code = compile(src, "<magic-timeit>", "exec")
+    try:
+        code = compile(src, "<magic-timeit>", "exec")
+    except:
+        log.warning("Compilation of following code failed:\n%s" % src)
+        raise
 
-    exec code in ns
-    timer.inner = ns["inner"]
+    try:
+        exec code in ns
+        timer.inner = ns["inner"]
+    except:
+        log.warning("Execution of following compiled code to obtain 'inner' has failed:\n%s" % src)
+        raise
+
 
     if ncalls is None:
         # determine number so that 0.2 <= total time < 2.0
@@ -416,7 +425,11 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
     else:
         number = ncalls
 
-    best = min(timer.repeat(repeat, number)) / number
+    try:
+        best = min(timer.repeat(repeat, number)) / number
+    except:
+        log.warning("Timing of following code has failed:\n%s" % src)
+        raise
 
     if force_ms:
         order = 1
