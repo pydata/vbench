@@ -211,13 +211,15 @@ class Benchmark(object):
 
         ylo, yhi = ax.get_ylim()
 
-        if ylo < 1:
+        # Start y axis from 0 if we are already close by
+        if ylo < 1 and yhi > 3:
             ax.set_ylim([0, yhi])
 
         formatter = DateFormatter("%b %Y")
         ax.xaxis.set_major_locator(MonthLocator())
         ax.xaxis.set_major_formatter(formatter)
-        ax.set_xlim((np.min(xlims, axis=0)[0], np.max(xlims, axis=0)[1]))
+        if len(xlims):
+            ax.set_xlim((np.min(xlims, axis=0)[0], np.max(xlims, axis=0)[1]))
         ax.autoscale_view(scalex=True)
 
         if title:
