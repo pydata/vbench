@@ -12,6 +12,9 @@ from .analysis import ConsistentlyWorse
 import logging
 log = logging.getLogger('vb.reports')
 
+def sorted_by_str(l):
+    return sorted(l, cmp=lambda x,y: cmp(str(x), str(y)))
+
 def group_benchmarks_by_module(benchmarks):
     benchmarks_by_module = {}
     for b in benchmarks:
@@ -38,7 +41,8 @@ def generate_rst_files(benchmarks, dbpath, outpath, branches=None, description="
         os.makedirs(fig_base_path)
 
     log.info("Generating rst files for %d benchmarks" % (len(benchmarks)))
-    for bmk in benchmarks:
+    # sorting is done only for aesthetics in logging
+    for bmk in sorted_by_str(benchmarks):
         log.debug('Generating rst file for %s' % bmk.name)
         rst_path = os.path.join(outpath, 'vbench/%s.rst' % bmk.name)
 
@@ -47,7 +51,11 @@ def generate_rst_files(benchmarks, dbpath, outpath, branches=None, description="
         # make the figure
         plt.figure(figsize=(10, 6))
         ax = plt.gca()
-        bmk.plot(dbpath, branches=branches, ax=ax)
+        try:
+            bmk.plot(dbpath, branches=branches, ax=ax)
+        except Exception, e:
+            log.warning("Plotting of %s failed: %s" % (bmk, e))
+            continue
 
         start, end = ax.get_xlim()
 
@@ -77,14 +85,14 @@ These historical benchmark graphs were produced with `vbench
         # group benchmarks by module there belonged to
         benchmarks_by_module = group_benchmarks_by_module(benchmarks)
 
-        for modname, mod_bmks in sorted(benchmarks_by_module.items()):
+        for modname, mod_bmks in sorted_by_str(benchmarks_by_module.items()):
             print >> f, '    vb_%s' % modname
             modpath = os.path.join(outpath, 'vb_%s.rst' % modname)
             with open(modpath, 'w') as mh:
                 header = '%s\n%s\n\n' % (modname, '=' * len(modname))
                 print >> mh, header
 
-                for bmk in mod_bmks:
+                for bmk in sorted_by_str(mod_bmks):
                     print >> mh, ".. _%s:\n" % bmk.get_rst_label()
                     print >> mh, bmk.name
                     print >> mh, '-' * len(bmk.name)
@@ -102,9 +110,12 @@ Benchmarks Performance Analysis
 """
         all_res = []
         for b in benchmarks:
+            results = b.get_results(dbpath)
+            if not len(results):
+                log.warning("No results for %s -- skipping analysis" % b)
+                continue
             # basic analysis: find
             for check in checks:
-                results = b.get_results(dbpath)
                 res = check(results)
                 if res:
                     res['benchmark'] = ":ref:`%s`" % b.get_rst_label()
