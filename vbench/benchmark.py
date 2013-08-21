@@ -424,6 +424,11 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
             if timer.timeit(number) >= 0.2:
                 break
             number *= 10
+        if number == 1:
+            # and if it is "that long" run at least 3 "magic" times to
+            # improve stability of the estimates which still can
+            # fluctuate
+            number = 3
     else:
         number = ncalls
 
