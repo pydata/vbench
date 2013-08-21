@@ -136,7 +136,7 @@ Benchmarks Performance Analysis
                          res['source_diff'] = 'N/A'
                     all_res.append(res)
 
-        if res:
+        if all_res:
             # sort all by the slowdown_percent showing the slowest first
             all_res = sorted(all_res, key=lambda x:x['slowdown_percent'], reverse=True)
             print >> f, """
