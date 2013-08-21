@@ -421,7 +421,7 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
         # determine number so that 0.2 <= total time < 2.0
         number = 1
         for _ in range(1, 10):
-            if timer.timeit(number) >= 0.1:
+            if timer.timeit(number) >= 0.2:
                 break
             number *= 10
     else:
