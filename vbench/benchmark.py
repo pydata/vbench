@@ -332,7 +332,8 @@ class BenchmarkSuite(list):
 # Modified from IPython project, http://ipython.org
 
 
-def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
+def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False,
+                 target_timing=0.3):
     """Time execution of a Python statement or expression
 
     Usage:\\
@@ -416,19 +417,28 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
         log.warning("Execution of following compiled code to obtain 'inner' has failed:\n%s" % src)
         raise
 
-
     if ncalls is None:
-        # determine number so that 0.2 <= total time < 2.0
+        #D import time; t0 = time.time()
+
+        # determine number of iterations to get close to target timing
         number = 1
-        for _ in range(1, 10):
-            if timer.timeit(number) >= 0.2:
+        for _ in range(1, 200):
+            timed = timer.timeit(number)
+            if timed >= target_timing:
                 break
-            number *= 10
-        if number == 1:
-            # and if it is "that long" run at least 3 "magic" times to
-            # improve stability of the estimates which still can
-            # fluctuate
-            number = 3
+            # estimate how much to step at once -- by looping and due to int() this estimate
+            # should already be conservative enough to not "jump over".
+            # This should allow to converge on target timing a bit faster
+            # without wasting precious CPU cycles without doing any benchmarking.
+            mult = 2**max(int(np.log2(target_timing/timed)), 1)
+            #D print "%d timed at %.2g. multiplying by %.2g" % (number, timed, mult)
+            number *= mult
+            if timed * mult >= target_timing:
+                # we already know that it should be close enough to
+                # target timing
+                break
+        #D t1 = time.time()
+        #D print "D: took %.2f seconds to figure out number %d" % (t1 - t0, number)
     else:
         number = ncalls
 
@@ -447,7 +457,7 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
             order = 0
         else:
             order = 3
-
+    #D print "D: took %.2f seconds to repeat %d times with best=%.4g" % (time.time() - t1, repeat, best)
     return {'loops': number,
             'repeat': repeat,
             'timing': best * scaling[order],
