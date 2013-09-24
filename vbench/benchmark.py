@@ -332,8 +332,9 @@ class BenchmarkSuite(list):
 # Modified from IPython project, http://ipython.org
 
 
-def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False,
-                 target_timing=0.3):
+def magic_timeit(ns, stmt, ncalls=None,
+                 repeat=7, force_ms=False,
+                 target_timing=0.05):
     """Time execution of a Python statement or expression
 
     Usage:\\
@@ -422,6 +423,7 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False,
 
         # determine number of iterations to get close to target timing
         number = 1
+        maxnumber = 100000
         for _ in range(1, 200):
             timed = timer.timeit(number)
             if timed >= target_timing:
@@ -433,7 +435,8 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False,
             mult = 2**max(int(np.log2(target_timing/timed)), 1)
             #D print "%d timed at %.2g. multiplying by %.2g" % (number, timed, mult)
             number *= mult
-            if timed * mult >= target_timing:
+            number = min(number, maxnumber)
+            if timed * mult >= target_timing or number >= maxnumber:
                 # we already know that it should be close enough to
                 # target timing
                 break
