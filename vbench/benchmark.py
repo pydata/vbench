@@ -333,8 +333,8 @@ class BenchmarkSuite(list):
 
 
 def magic_timeit(ns, stmt, ncalls=None,
-                 repeat=7, force_ms=False,
-                 target_timing=0.05):
+                 repeat=None, force_ms=False,
+                 target_timing=0.5):
     """Time execution of a Python statement or expression
 
     Usage:\\
@@ -417,13 +417,12 @@ def magic_timeit(ns, stmt, ncalls=None,
     except:
         log.warning("Execution of following compiled code to obtain 'inner' has failed:\n%s" % src)
         raise
+    #D import time; t0 = time.time()
 
-    if ncalls is None:
-        #D import time; t0 = time.time()
-
+    # if any of ncalls or repeat is unspecified -- deduce
+    if ncalls is None or repeat is None:
         # determine number of iterations to get close to target timing
-        number = 1
-        maxnumber = 100000
+        number = ncalls or 1
         for _ in range(1, 200):
             timed = timer.timeit(number)
             if timed >= target_timing:
@@ -435,15 +434,29 @@ def magic_timeit(ns, stmt, ncalls=None,
             mult = 2**max(int(np.log2(target_timing/timed)), 1)
             #D print "%d timed at %.2g. multiplying by %.2g" % (number, timed, mult)
             number *= mult
-            number = min(number, maxnumber)
-            if timed * mult >= target_timing or number >= maxnumber:
+            if timed * mult >= target_timing:
                 # we already know that it should be close enough to
                 # target timing
                 break
         #D t1 = time.time()
         #D print "D: took %.2f seconds to figure out number %d" % (t1 - t0, number)
     else:
+        #D t1 = time.time()
         number = ncalls
+
+    # if it is still None
+    if repeat is None and ncalls is None:
+        # so number was deduced, thus take both repeat and
+        # number to be equal to stay close to target timing
+        # But have at least 3 repeats
+        repeat = max(3, int(np.sqrt(number)))
+        # and at least 1 run
+        number = max(1, int(number // repeat))
+    elif repeat is None:
+        repeat = max(1, int(number // ncalls))
+        number = ncalls
+    elif ncalls is None:
+        number = max(1, int(number // repeat))
 
     try:
         best = min(timer.repeat(repeat, number)) / number
