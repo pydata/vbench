@@ -11,6 +11,7 @@ import shutil
 from glob import glob
 from os.path import exists, join as pjoin, dirname, basename
 
+import numpy as np
 from nose.tools import ok_, eq_
 from numpy.testing import assert_array_equal
 
@@ -85,6 +86,22 @@ def test_benchmarkrunner():
 
     # in the GitRepo
     eq_(set(runner.repo.sha_branches['ecf481d']), set(['master', 'origin/branch1']))
+
+    # Let's rerun the runner instructing to run already known results
+    # aiming for new 'min's
+    old_results = [runner.db.get_benchmark_results(b.checksum) for b in benchmarks]
+    runner.existing = 'min'
+    revisions_ran = runner.run()
+    eq_(revisions_ran[0], ('e9375c8', (False, 0)))   # still has nothing
+    # all others should have got all benchmarks re-ran
+    for rev, v in revisions_ran[1:]:
+        eq_(v, (True, len(runner.benchmarks)))
+    # and new results should be only better
+    new_results = [runner.db.get_benchmark_results(b.checksum) for b in benchmarks]
+    for o, n in zip(old_results, new_results):
+        # we can't test if it got better actually, but we can assure
+        # that it got no worse
+        ok_(np.all(o.timing[1:] - n.timing[1:] >= 0))
 
     # Now let's smoke test generation of the .rst files
     from vbench.reports import generate_rst_files

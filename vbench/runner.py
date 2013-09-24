@@ -36,7 +36,10 @@ class BenchmarkRunner(object):
         reverse: in reverse order (latest first)
         multires: cover all revisions but in the order increasing
                   temporal detail
-    overwrite : boolean
+    existing : {'skip', 'min'}
+        'skip' : do not re-run the benchmark if already estimated
+        'min'  : re-run and store possibly updated better (min)
+                 estimate
     dependencies : list or None
         should be list of modules visible in cwd
     """
@@ -47,7 +50,8 @@ class BenchmarkRunner(object):
                  clean_cmd=None,
                  branches=['master'],
                  run_option='eod', run_order='normal',
-                 start_date=None, overwrite=False,
+                 start_date=None,
+                 existing='skip',
                  module_dependencies=None,
                  always_clean=False,
                  use_blacklist=True,
@@ -62,6 +66,8 @@ class BenchmarkRunner(object):
         self.start_date = start_date
         self.run_option = run_option
         self.run_order = run_order
+        assert(existing in ('skip', 'min'))
+        self.existing = existing
 
         self.repo_path = repo_path
         self.db_path = db_path
@@ -180,6 +186,23 @@ class BenchmarkRunner(object):
 
             any_succeeded = any_succeeded or 'timing' in timing
 
+            if self.existing == 'min':
+                # verify that we have no information on this benchmark already
+                b_prev_results = self.db.get_benchmark_results(checksum, rev=rev)
+                assert(len(b_prev_results) < 2) # should be none or just 1 entry
+                if len(b_prev_results):
+                    old_timing = b_prev_results.ix[0].to_dict()
+                    if old_timing['timing'] and (old_timing['timing'] < timing.get('timing')):
+                        # we had better result already -- skip saving this one
+                        log.debug("Benchmark %s was already timed at %(timing)f - skipping"
+                                  % old_timing)
+                        continue
+                    else:
+                        # we had worse results -- so remove them from
+                        # DB in favor of new ones to be introduced
+                        log.debug("Benchmark %s was timed before at %(timing)f - deleting"
+                                  % old_timing)
+                        self.db.delete_benchmark_results(checksum, rev=rev)
             self.db.write_result(checksum, rev, timestamp,
                                  timing.get('loops'),
                                  timing.get('timing'),
@@ -256,14 +279,15 @@ class BenchmarkRunner(object):
     def _get_benchmarks_for_rev(self, rev):
         existing_results = self.db.get_rev_results(rev)
         need_to_run = []
-
+        rerun_good_ones = (self.existing == 'min')
         timestamp = self.repo.commits.timestamps[rev]
 
         for b in self.benchmarks:
             if b.start_date is not None and b.start_date > timestamp:
                 continue
 
-            if b.checksum not in existing_results:
+            if (b.checksum not in existing_results) \
+                or (rerun_good_ones and existing_results[b.checksum]['ncalls']):
                 need_to_run.append(b)
 
         return need_to_run
