@@ -103,7 +103,9 @@ class BenchmarkDB(object):
         """
 
         """
-        pass
+        raise NotImplementedError
+        self.delete_benchmark_results(checksum)
+        # TODO -- delete from benchmarks table
 
     def write_result(self, checksum, revision, timestamp, ncalls,
                      timing, traceback=None, overwrite=False):
@@ -115,12 +117,6 @@ class BenchmarkDB(object):
                          timestamp=timestamp,
                          ncalls=ncalls, timing=timing, traceback=traceback)
         self.conn.execute(ins)  # XXX: return the result?
-
-    def delete_result(self, checksum, revision):
-        """
-
-        """
-        pass
 
     def delete_error_results(self):
         tab = self._results
@@ -176,18 +172,30 @@ class BenchmarkDB(object):
                           sql.and_(tab.c.branch == branch))
         return [x['revision'] for x in self.conn.execute(stmt)]
 
-    def get_benchmark_results(self, checksum):
+    def get_benchmark_results(self, checksum, rev=None):
         """
 
         """
         tab = self._results
+        select_args = [tab.c.checksum == checksum]
+        if rev: select_args.append(tab.c.revision == rev)
         stmt = sql.select([tab.c.timestamp, tab.c.revision, tab.c.ncalls,
                            tab.c.timing, tab.c.traceback],
-                          sql.and_(tab.c.checksum == checksum))
+                          sql.and_(*select_args))
         results = self.conn.execute(stmt)
 
         df = _sqa_to_frame(results).set_index('timestamp')
         return df.sort_index()
+
+    def delete_benchmark_results(self, checksum, rev=None):
+        """Delete results for the benchmark. Restrict only to a rev if provided
+
+        """
+        tab = self._results
+        select_args = [tab.c.checksum == checksum]
+        if rev: select_args.append(tab.c.revision == rev)
+        stmt = tab.delete().where(sql.and_(*select_args))
+        self.conn.execute(stmt)
 
 
 def _sqa_to_frame(result):
