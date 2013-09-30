@@ -334,7 +334,7 @@ class BenchmarkSuite(list):
 
 def magic_timeit(ns, stmt, ncalls=None,
                  repeat=None, force_ms=False,
-                 target_timing=0.5):
+                 target_timing=0.1):
     """Time execution of a Python statement or expression
 
     Usage:\\
