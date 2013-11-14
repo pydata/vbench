@@ -55,6 +55,8 @@ class ConsistentlyWorse(object):
         idxs = np.isfinite(means)
         results = results[idxs]
         means = means[idxs]
+        if means.size == 0:
+            return None
 
         min_idx = np.argmin(means)
         min_ = means[min_idx]
