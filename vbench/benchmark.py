@@ -60,7 +60,10 @@ class Benchmark(object):
         self.prereq = prereq
 
     def __repr__(self):
-        return "Benchmark('%s')" % self.name
+        return "Benchmark(%r, %r, name=%r)" % (self.code, self.setup, self.name)
+
+    def __str__(self):
+        return "Benchmark:%s" % self.name
 
     def _setup(self):
         ns = globals().copy()
