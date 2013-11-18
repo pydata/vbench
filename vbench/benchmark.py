@@ -212,8 +212,17 @@ class Benchmark(object):
         ylo, yhi = ax.get_ylim()
 
         # Start y axis from 0 if we are already close by
+        # minimum range +- 10% of median of last couple entries
+        # assures plots with little change look straight
         if ylo < 1 and yhi > 3:
+            mid = np.median(timing[-100:])
+            yhi = max(yhi, mid + mid * 0.30)
             ax.set_ylim([0, yhi])
+        else:
+            mid = np.median(timing[-100:])
+            ylo = min(ylo, mid - mid * 0.15)
+            yhi = max(yhi, mid + mid * 0.15)
+            ax.set_ylim([ylo, yhi])
 
         formatter = DateFormatter("%b %Y")
         ax.xaxis.set_major_locator(MonthLocator())
