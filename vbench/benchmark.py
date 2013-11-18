@@ -30,7 +30,14 @@ class Benchmark(object):
 
     def __init__(self, code, setup, ncalls=None, repeat=3, cleanup=None,
                  name=None, module_name=None, description=None, start_date=None,
-                 logy=False):
+                 logy=False, prereq=None):
+        """
+        Parameters
+        ----------
+        prereq: str
+          Prerequisites which need to be fulfilled (run without error) to consider
+          benchmark worthwhile (ATM only during verification)
+        """
         self.code = code
         self.setup = setup
         self.cleanup = cleanup or ''
@@ -49,6 +56,8 @@ class Benchmark(object):
         self.description = description
         self.start_date = start_date
         self.logy = logy
+
+        self.prereq = prereq
 
     def __repr__(self):
         return "Benchmark('%s')" % self.name
@@ -98,6 +107,10 @@ class Benchmark(object):
         try:
             stage = 'setup'
             ns = self._setup()
+
+            if self.prereq:
+                stage = 'prereq'
+                exec self.prereq in ns
 
             stage = 'benchmark'
             result = magic_timeit(ns, self.code, ncalls=ncalls or self.ncalls,
