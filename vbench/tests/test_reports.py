@@ -1,0 +1,46 @@
+#emacs: -*- mode: python-mode; py-indent-offset: 4; tab-width: 4; indent-tabs-mode: nil -*-
+#ex: set sts=4 ts=4 sw=4 noet:
+#------------------------- =+- Python script -+= -------------------------
+"""
+ COPYRIGHT: Yaroslav Halchenko 2013
+
+ LICENSE: MIT
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+"""
+
+__author__ = 'Yaroslav Halchenko'
+__copyright__ = 'Copyright (c) 2013 Yaroslav Halchenko'
+__license__ = 'MIT'
+
+from nose.tools import eq_, assert_greater
+
+import time
+from vbench.benchmark import Benchmark
+from vbench.reports import sorted_by_str
+
+def test_sort_by_str():
+    bm1 = Benchmark('1', '', name='one')
+    bm2 = Benchmark('2', '', name='2')
+    bm3 = Benchmark('3', '') # it will acquire name of bm3 while the other ones just go with specified
+
+    out = sorted_by_str([bm1, bm2, bm3])
+    assert(out[0] is bm2)
+    assert(out[1] is bm3)
+    assert(out[2] is bm1)
