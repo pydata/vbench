@@ -188,11 +188,16 @@ class Benchmark(object):
             raise NotImplementedError("Plotting with logy and multiple branches is not yet supported")
 
         xlims = [] # xlimits to all plots to assure a full dates coverage
+        # for older numpy we need to pre-digest results.revision so it
+        # is sortable string type
+        timing = [ 0 ] # just if there were no branches to plot
+        results_revs = np.array(results.revision)
+        if len(results_revs):
+            results_revs = results_revs.astype('S%d' % len(results.revision[0]))
         for branch in (branches if branches is not None else [None]):
-
             # Select only the revisions belonging to the branch
             branch_revs = db.get_branch_revs(branch)
-            results_ = results[np.in1d(results.revision, branch_revs)]
+            results_ = results[np.in1d(results_revs, branch_revs)]
             if not len(results_):
                 log.warning("Skipping plotting for branch %s since no revisions"
                             " were benchmarked for it" % branch)
