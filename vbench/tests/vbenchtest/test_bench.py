@@ -16,11 +16,50 @@ from nose.tools import ok_, eq_
 from numpy.testing import assert_array_equal
 
 from vbench.api import BenchmarkRunner
+from vbench.runner import _RUN_ORDERS
 
 #import logging
 #log = logging.getLogger('vb')
 #log.setLevel('DEBUG')
 
+def check_benchmarkrunner_order(run_order, run_limit):
+    from suite import *
+
+    runner = BenchmarkRunner(benchmarks, REPO_PATH, REPO_URL,
+                             BUILD, DB_PATH, TMP_DIR, PREPARE,
+                             branches=BRANCHES,
+                             clean_cmd=CLEAN,
+                             run_option='all', run_order=run_order, run_limit=run_limit,
+                             start_date=START_DATE,
+                             module_dependencies=DEPENDENCIES)
+    revisions_to_run = runner.get_revisions_to_run()
+    revisions = [runner.get_revisions_to_run() for x in range(3)]
+    if run_order == 'random':
+        # should differ upon subseq calls
+        # at least one of those should differ from original one
+        differ = False
+        for revs in revisions:
+            if np.any(revs != revisions_to_run):
+                differ = True
+                break
+        if not differ:
+            raise AssertionError("All generated random samples of revisions are the same: %s" % revisions)
+    else:
+        # should all be the same
+        for revs in revisions:
+            assert_array_equal(revs, revisions_to_run)
+    if not run_limit:
+        eq_(len(revisions_to_run), 7, "we should have only this many revisions")
+    else:
+        eq_(len(revisions_to_run), min(run_limit, 7), "we should get only up to %d revisions to run" % (min(7, run_limit)))
+    pass
+
+def test_benchmarkrunner_orders():
+    for run_order in _RUN_ORDERS.keys():
+        yield check_benchmarkrunner_order, run_order, None
+    # just check if we limit correctly
+    yield check_benchmarkrunner_order, run_order, 2
+    yield check_benchmarkrunner_order, 'normal', 100
 
 def test_benchmarkrunner():
     from suite import *
@@ -38,8 +77,7 @@ def test_benchmarkrunner():
                              run_option='all', run_order='normal',
                              start_date=START_DATE,
                              module_dependencies=DEPENDENCIES)
-    revisions_to_run = runner._get_revisions_to_run()
-    eq_(len(revisions_to_run), 7, "we should have only this many revisions")
+    revisions_to_run = runner.get_revisions_to_run()
     revisions_ran = runner.run()
     # print "D1: ", revisions_ran
     # for this test we should inject our "failed to build revision"

@@ -2,6 +2,8 @@ import cPickle as pickle
 import os
 import subprocess
 
+import numpy as np
+
 from vbench.git import GitRepo, BenchRepo, FailedToBuildError
 from vbench.db import BenchmarkDB
 from vbench.utils import multires_order, verify_benchmarks
@@ -15,6 +17,7 @@ _RUN_ORDERS = dict(
     normal=lambda x:x,
     reverse=lambda x:x[::-1],
     multires=multires_order,
+    random=lambda x:x[np.random.permutation(range(x if isinstance(x, int) else len(x)))],
     )
 
 class BenchmarkRunner(object):
@@ -36,6 +39,9 @@ class BenchmarkRunner(object):
         reverse: in reverse order (latest first)
         multires: cover all revisions but in the order increasing
                   temporal detail
+        random: random order
+    run_limit : int, optional
+        If specified, only up to run_limit revisions will be benchmarked
     existing : {'skip', 'min'}
         'skip' : do not re-run the benchmark if already estimated
         'min'  : re-run and store possibly updated better (min)
@@ -49,7 +55,7 @@ class BenchmarkRunner(object):
                  prep_cmd,
                  clean_cmd=None,
                  branches=['master'],
-                 run_option='eod', run_order='normal',
+                 run_option='eod', run_order='normal', run_limit=None,
                  start_date=None,
                  existing='skip',
                  module_dependencies=None,
@@ -66,6 +72,8 @@ class BenchmarkRunner(object):
         self.start_date = start_date
         self.run_option = run_option
         self.run_order = run_order
+        self.run_limit = run_limit
+
         assert(existing in ('skip', 'min'))
         self.existing = existing
 
@@ -109,7 +117,7 @@ class BenchmarkRunner(object):
 
     def run(self):
         log.info("Collecting revisions to run")
-        revisions = self._get_revisions_to_run()
+        revisions = self.get_revisions_to_run()
         ran_revisions = []
         log.info("Running benchmarks for %d revisions" % (len(revisions),))
         # get the current black list (might be a different one on a next .run())
@@ -292,7 +300,9 @@ class BenchmarkRunner(object):
 
         return need_to_run
 
-    def _get_revisions_to_run(self):
+    def get_revisions_to_run(self):
+        """Return list of revisions which need to be benchmarked
+        """
 
         # TODO generalize someday to other vcs...git only for now
 
@@ -325,4 +335,6 @@ class BenchmarkRunner(object):
                              % (self.run_order, _RUN_ORDERS.keys()))
         revs_to_run = _RUN_ORDERS[self.run_order](revs_to_run)
 
+        if self.run_limit:
+            revs_to_run = revs_to_run[:self.run_limit]
         return revs_to_run
