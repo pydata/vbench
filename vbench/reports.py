@@ -5,6 +5,7 @@
 __copyright__ = '2012-2013 Wes McKinney, Yaroslav Halchenko'
 __license__ = 'MIT'
 
+from __future__ import print_function
 import os
 
 import logging
@@ -50,7 +51,7 @@ def generate_rst_files(benchmarks, dbpath, outpath, description=""):
             f.write(rst_text)
 
     with open(os.path.join(outpath, 'index.rst'), 'w') as f:
-        print >> f, """
+        print("""
 Performance Benchmarks
 ======================
 
@@ -62,7 +63,7 @@ These historical benchmark graphs were produced with `vbench
 .. toctree::
     :hidden:
     :maxdepth: 3
-""" % locals()
+""" % locals(), file=f)
         # group benchmarks by module there belonged to
         benchmarks_by_module = {}
         for b in benchmarks:
@@ -72,14 +73,14 @@ These historical benchmark graphs were produced with `vbench
             benchmarks_by_module[module_name].append(b)
 
         for modname, mod_bmks in sorted(benchmarks_by_module.items()):
-            print >> f, '    vb_%s' % modname
+            print('    vb_%s' % modname, file=f)
             modpath = os.path.join(outpath, 'vb_%s.rst' % modname)
             with open(modpath, 'w') as mh:
                 header = '%s\n%s\n\n' % (modname, '=' * len(modname))
-                print >> mh, header
+                print(header, file=mh)
 
                 for bmk in mod_bmks:
-                    print >> mh, bmk.name
-                    print >> mh, '-' * len(bmk.name)
-                    print >> mh, '.. include:: vbench/%s.rst\n' % bmk.name
+                    print(bmk.name, file=mh)
+                    print('-' * len(bmk.name), file=mh)
+                    print('.. include:: vbench/%s.rst\n' % bmk.name, file=mh)
 
