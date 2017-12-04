@@ -1,6 +1,10 @@
 # pylint: disable=W0122
 
-from cStringIO import StringIO
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import StringIO
+
 
 import cProfile
 try:
@@ -16,6 +20,8 @@ import hashlib
 import time
 import traceback
 import inspect
+
+from vbench.compat import exec_
 
 # from pandas.util.testing import set_trace
 
@@ -49,11 +55,11 @@ class Benchmark(object):
 
     def _setup(self):
         ns = globals().copy()
-        exec self.setup in ns
+        exec_(self.setup, ns)
         return ns
 
     def _cleanup(self, ns):
-        exec self.cleanup in ns
+        exec_(self.cleanup, ns)
 
     @property
     def checksum(self):
@@ -67,7 +73,7 @@ class Benchmark(object):
 
         def f(*args, **kw):
             for i in xrange(ncalls):
-                exec code in ns
+                exec_(code, ns)
         prof.runcall(f)
 
         self._cleanup(ns)
@@ -109,7 +115,7 @@ class Benchmark(object):
 
         start = time.clock()
         for _ in xrange(ncalls):
-            exec code in ns
+            exec_(code, ns)
 
         elapsed = time.clock() - start
         if disable_gc:
@@ -355,13 +361,13 @@ def magic_timeit(ns, stmt, ncalls=None, repeat=3, force_ms=False):
     # but is there a better way to achieve that the code stmt has access
     # to the shell namespace?
 
-    src = timeit.template % {'stmt': timeit.reindent(stmt, 8),
-                             'setup': "pass"}
+    src = timeit.template.format(stmt=timeit.reindent(stmt, 8),
+                                 setup="pass")
     # Track compilation time so it can be reported if too long
     # Minimum time above which compilation time will be reported
     code = compile(src, "<magic-timeit>", "exec")
 
-    exec code in ns
+    exec_(code, ns)
     timer.inner = ns["inner"]
 
     if ncalls is None:
